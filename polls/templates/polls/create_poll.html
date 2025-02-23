@@ -1,0 +1,10 @@
+{% extends 'polls/base.html' %}
+{% block title %}Create Poll - Polls App{% endblock %}
+{% block content %}
+  <h2>Create a New Poll</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-success">Create Poll</button>
+  </form>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'polls/base.html' %}
+{% block title %}Home - Polls App{% endblock %}
+{% block content %}
+  <h1>All Polls</h1>
+  <div class="polls-list">
+    {% for poll in polls %}
+      <div class="poll-card card mb-3 {% if highlight_poll_id and poll.id|stringformat:"s" == highlight_poll_id %}highlight{% endif %}">
+        <div class="card-body">
+          <h5 class="card-title">{{ poll.question }}</h5>
+          <p class="card-text">Created by: {{ poll.creator_username }}</p>
+          <ul class="list-group">
+            {% for option in poll.options.all %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ option.option_text }}
+                <span class="badge badge-primary badge-pill">{{ option.votes }}</span>
+                <a href="{% url 'vote' poll.id option.id %}" class="btn btn-sm btn-success">Vote</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

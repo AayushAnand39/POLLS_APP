@@ -1,0 +1,22 @@
+body {
+    transition: background-color 0.5s ease;
+}
+  
+.poll-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+  
+.poll-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.highlight {
+    border: 2px solid #28a745;
+    animation: highlightAnim 1s ease-in-out;
+}
+  
+@keyframes highlightAnim {
+    from { background-color: #ffffcc; }
+    to { background-color: white; }
+}

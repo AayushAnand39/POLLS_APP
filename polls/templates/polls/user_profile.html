@@ -1,0 +1,20 @@
+{% extends 'polls/base.html' %}
+{% block title %}Profile - Polls App{% endblock %}
+{% block content %}
+  <h2>Your Profile</h2>
+  <div class="profile-info">
+    <img src="{{ profile.profile_pic.url }}" alt="Profile Pic" class="img-thumbnail" width="150">
+    <p>Username: {{ request.user.username }}</p>
+    <p>Age: {{ profile.age }}</p>
+  </div>
+  <h3>Your Poll History</h3>
+  <ul class="list-group">
+    {% for history in histories %}
+      <li class="list-group-item">
+        {{ history.action|title }} poll with ID {{ history.poll_id }} on {{ history.timestamp|date:"M d, Y H:i" }}
+        <!-- Clicking redirects to home and highlights the poll -->
+        <a href="{% url 'home' %}?poll={{ history.poll_id }}" class="btn btn-sm btn-info float-right">View Poll</a>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}
