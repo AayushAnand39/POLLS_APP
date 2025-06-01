@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Section</title>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+        <a href="{% url 'post' email=email %}">POST</a>
+        <a href="{% url 'chat' email=email %}">CHAT</a>
+        <a href="/official">OFFICIAL</a>
+        <a href="/profile">PROFILE</a>
+        <a href="{% url 'logout' email=email %}">LOGOUT</a>
+    </div>
+    <div class="chatlist">
+        <input type="text" name="name" id="name" placeholder="Search for a user to chat with">
+        <input type="submit" value="Search" onclick="userSearch()">
+        <div class="searchedUsers"></div>
+    </div>
+    <div class="recentchats">
+        <h2>Recently Contacted</h2>
+        {% for chat in recentChatsData %}
+            <button onclick="startChat('{{ chat.other }}')">
+            <div class="chat">
+                <h4>{{ chat.other }}</h4>
+                <p>{{ chat.message }}</p>
+            </div>
+            </button>
+            <br>
+        {% empty %}
+            <p>No recent chats.</p>
+        {% endfor %}
+    </div>
+    <div class="chatarea">
+        <div class="namearea"></div>
+        <div class="chatsarea"></div>
+        <div class="textArea"></div>
+    </div>
+</body>
+<script>
+    const senderEmail = `{{ email }}`
+    const getCookie = (name) => {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let cookie of cookies) {
+                cookie = cookie.trim();
+                if (cookie.startsWith(name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const userSearch = ()=>{
+        const input = document.getElementById("name").value
+        fetch("/chat-search/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                name: input
+            })
+        }).then(response => response.json()).then(data=>{
+            const searchedUsers = document.querySelector(".searchedUsers")
+            searchedUsers.innerHTML = data.results.map(user=>{
+                return `<div class="user" id="${user.email}">
+                            ${user.name}
+                            <button onclick="startChat('${user.email}')">Start Chat</button>
+                        </div>
+                `
+            }).join("")
+        })
+    }
+
+    const startChat = (receiverEmail)=>{
+        const nameArea = document.querySelector(".namearea")
+        nameArea.innerHTML = `<h3>${receiverEmail}</h3>`
+        fetch("/get-chats/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                senderEmail: senderEmail,
+                receiverEmail: receiverEmail
+            })
+        }).then(response => response.json()).then(data=>{
+            const chatsArea = document.querySelector(".chatsarea")
+            chatsArea.innerHTML = data.messages.map(chat=>{
+                return `${chat.senderemail === senderEmail ?
+                        `<div class="chat" style="background-color: #d1e7dd;">
+                            <h4>You</h4>
+                            <p style="text-align:right">${chat.message}</p>
+                        </div>` :
+                        `<div class="chat" style="background-color: #f8d7da;">
+                            <h4>${chat.senderemail}</h4>
+                            <p style="text-align:left">${chat.message}</p>
+                        </div>`
+                    }`
+            }).join("")
+        })
+        const textArea = document.querySelector(".textArea")
+        textArea.innerHTML = `<textarea id="message" placeholder="Message"></textarea>
+                            <button onclick="sendMessage('${receiverEmail}')">Send</button>
+                            `
+    }
+
+    const sendMessage = (receiverEmail)=>{
+        const message = document.getElementById("message").value
+        fetch("/send-message/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                message: message,
+                receiverEmail: receiverEmail,
+                senderEmail: senderEmail
+            })
+        }).then(response => response.json())
+        window.location.reload()
+    }
+</script>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+        <a href="{% url 'post' email=email %}">POST</a>
+        <a href="{% url 'chat' email=email %}">CHAT</a>
+        <a href="/official">OFFICIAL</a>
+        <a href="/profile">PROFILE</a>
+        <a href="{% url 'logout' email=email %}">LOGOUT</a>
+    </div>
+    {% for questions in questionsData %}
+        <h3>{{questions.authoremail}}</h3>
+        <h2>{{questions.question}}</h2>
+        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.1">{{questions.option1}}</button> {{questions.percentage1}}%</h4>
+        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.2">{{questions.option2}}</button> {{questions.percentage2}}%</h4>
+        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.3">{{questions.option3}}</button> {{questions.percentage3}}%</h4>
+        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.4">{{questions.option4}}</button> {{questions.percentage4}}%</h4>
+    {% endfor %}
+</body>
+<script>
+    const getCookie = (name) => {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let cookie of cookies) {
+                cookie = cookie.trim();
+                if (cookie.startsWith(name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const vote = (id)=>{
+        const parts = id.split(".")
+        const questionnumber = parts[0]
+        const optionnumber = parts[1]
+        fetch("/vote/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                questionnumber: questionnumber,
+                optionnumber: optionnumber
+            })
+        }).then(response => response.json())
+    }
+
+    const getName = (email)=>{
+        fetch("/get-name/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                email: email
+            })
+        }).then(response => response.json())
+    }
+
+</script>
+</html>

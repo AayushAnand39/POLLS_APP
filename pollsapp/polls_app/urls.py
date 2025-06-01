@@ -1,0 +1,16 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("",views.index,name = "index"),
+    path("register",views.register,name = "register"),
+    path("login",views.login,name = "login"),
+    path("dashboard/<str:email>",views.dashboard,name="dashboard"),
+    path("post/<str:email>",views.post,name="post"),
+    path("logout/<str:email>",views.logout,name="logout"),
+    path("vote/", views.vote, name="vote"),
+    path("chat/<str:email>",views.chat,name="chat"),
+    path("chat-search/",views.chat_search,name="chat-search"),
+    path("send-message/",views.send_message,name="send-message"),
+    path("get-chats/",views.get_chats,name="get-chats"),
+]
