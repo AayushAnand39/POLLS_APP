@@ -211,6 +211,13 @@ def get_chats(request):
         return JsonResponse({"messages": messages_data})
     return JsonResponse({"error": "Invalid request"}, status=400)
 
+def official(request, email):
+    user = models.User.objects.get(email=email)
+    if user.logintime == user.logouttime:
+        return render(request,"official.html",{"email": email, "message" : "Welcome to the official section of the polls app"})
+    else:
+        return render(request,"Login.html")
+
     
 def logout(request, email):
     email = urllib.parse.unquote(email)

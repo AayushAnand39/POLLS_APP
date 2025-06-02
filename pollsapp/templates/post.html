@@ -10,7 +10,7 @@
         <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
         <a href="{% url 'post' email=email %}">POST</a>
         <a href="{% url 'chat' email=email %}">CHAT</a>
-        <a href="/official">OFFICIAL</a>
+        <a href="{% url 'official' email=email %}">OFFICIAL</a>
         <a href="/profile">PROFILE</a>
         <a href="{% url 'logout' email=email %}">LOGOUT</a>
     </div>

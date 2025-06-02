@@ -13,4 +13,5 @@ urlpatterns = [
     path("chat-search/",views.chat_search,name="chat-search"),
     path("send-message/",views.send_message,name="send-message"),
     path("get-chats/",views.get_chats,name="get-chats"),
+    path("official/<str:email>",views.official,name="official")
 ]
