@@ -217,6 +217,13 @@ def official(request, email):
         return render(request,"official.html",{"email": email, "message" : "Welcome to the official section of the polls app"})
     else:
         return render(request,"Login.html")
+    
+def createexam(request, email):
+    user = models.User.objects.get(email = email)
+    if user.logintime == user.logouttime:
+        return render(request,"createexam.html",{"email":email})
+    else:
+        return render(request,"Login.html")
 
     
 def logout(request, email):

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Official</title>
+    <title>Create Examination</title>
 </head>
 <body>
     <div class="navbar">
@@ -19,5 +19,14 @@
         <a href="/conductvote">CONDUCT A VOTE</a>
         <a href="/attendexam">ATTEND EXAMINATION</a>
     </div>
+    <form action="{% url 'createexam' email=email %}" method="post">
+        {% csrf_token %}
+        <input type="text" name="name" id="name" placeholder="Enter the name of the exam creator"><br>
+        <input type="email" name="email" id="email" placeholder="Enter the email of the exam creator"><br>
+        <input type="text" name="institution" id="institution" placeholder="Enter the institution you are affiliated with"><br>
+        <input type="text" name="phonenumber" id="phonenumber" placeholder="Enter your phone number"><br>
+        <input type="number" name="number" id="number" placeholder="Enter the number of questions"><br>
+        <input type="submit" value="Create exam">
+    </form>
 </body>
 </html>
