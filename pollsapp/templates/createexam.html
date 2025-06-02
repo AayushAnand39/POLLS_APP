@@ -19,14 +19,67 @@
         <a href="/conductvote">CONDUCT A VOTE</a>
         <a href="/attendexam">ATTEND EXAMINATION</a>
     </div>
-    <form action="{% url 'createexam' email=email %}" method="post">
-        {% csrf_token %}
-        <input type="text" name="name" id="name" placeholder="Enter the name of the exam creator"><br>
-        <input type="email" name="email" id="email" placeholder="Enter the email of the exam creator"><br>
-        <input type="text" name="institution" id="institution" placeholder="Enter the institution you are affiliated with"><br>
-        <input type="text" name="phonenumber" id="phonenumber" placeholder="Enter your phone number"><br>
-        <input type="number" name="number" id="number" placeholder="Enter the number of questions"><br>
-        <input type="submit" value="Create exam">
-    </form>
+    <div class="questions">
+        <form action="{% url 'createexam' email=email %}" method="post" onsubmit="return createExamQuestions(event)">
+            <!-- {% csrf_token %} -->
+            <input type="text" name="name" id="name" placeholder="Enter the name of the exam creator"><br>
+            <input type="email" name="email" id="email" placeholder="Enter the email of the exam creator"><br>
+            <input type="text" name="institution" id="institution" placeholder="Enter the institution you are affiliated with"><br>
+            <input type="text" name="phonenumber" id="phonenumber" placeholder="Enter your phone number"><br>
+            <input type="number" name="number" id="number" placeholder="Enter the number of questions"><br>
+            <input type="date" name="date" id="date" placeholder="Enter the starting date"><br>
+            <input type="time" name="starttime" id="starttime" placeholder="Enter the starting time of the examination"><br>
+            <input type="time" name="endtime" id="endtime" placeholder="Enter the ending time of the examination"><br>
+            <input type="text" name="description" id="description" placeholder="Enter the description of this examination"><br>
+            <input type="submit" value="Create exam">
+        </form>
+    </div>
 </body>
+<script>
+    const createExamQuestions = (event) => {
+        event.preventDefault();
+        console.log("Exam registration successful. Proceed for question creation.");
+        const questions = document.querySelector(".questions");
+        const count = parseInt(document.getElementById("number").value);
+        let i = 0;
+        renderQuestion();
+        function renderQuestion() {
+            if (i >= 0 && i < count) {
+                questions.innerHTML = `
+                    <h4>Question ${i + 1}</h4>
+                    <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
+                    <input type="option1" name="option1" id="option1" placeholder="Enter option 1">
+                    <input type="option2" name="option2" id="option2" placeholder="Enter option 2">
+                    <input type="option3" name="option3" id="option3" placeholder="Enter option 3">
+                    <input type="option4" name="option4" id="option4" placeholder="Enter option 4">
+                    <input type="number" name="positive" id="positive" placeholder="Enter score to be awarded for correct answer">
+                    <input type="number" name="negative" id="negative" placeholder="Enter score to be awarded for wrong answer">
+                    <input type="number" name="correct" id="correct" placeholder="Enter the correct option">
+                    <button id="clickprevious" ${i === 0 ? "disabled" : ""}>Previous</button>
+                    <button id="clicknext">Next</button>
+                `;
+                document.getElementById("clicknext").addEventListener("click", () => {
+                    i++;
+                    renderQuestion();
+                });
+                document.getElementById("clickprevious").addEventListener("click", () => {
+                    if (i > 0) {
+                        i--;
+                        renderQuestion();
+                    }
+                });
+            } 
+            else if (i === count) {
+                questions.innerHTML = `
+                    <h3>Thank you for creating the questions</h3>
+                    <button id="goback">Go Back</button>
+                `;
+                document.getElementById("goback").addEventListener("click", () => {
+                    i = count - 1;
+                    renderQuestion();
+                });
+            }
+        }
+    };
+</script>
 </html>

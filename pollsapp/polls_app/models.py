@@ -33,5 +33,14 @@ class Messages(models.Model):
     time = models.DateTimeField(default=timezone.now)
     read = models.BooleanField(default=False)
     
-
-    
+class ExamDetails(models.Model):
+    examid = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=200)
+    email = models.EmailField(max_length=200)
+    institution = models.CharField(max_length=200)
+    phonenumber = models.CharField(max_length=11)
+    numberOfQuestions = models.IntegerField(default=0)
+    startDate = models.DateField(default="0000-00-00")
+    startTime = models.TimeField(default="00:00")
+    endTime = models.TimeField(default="00:00")
+    description = models.CharField(max_length=5000)
