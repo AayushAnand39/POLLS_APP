@@ -5,3 +5,4 @@ from . import models
 admin.site.register(models.User)
 admin.site.register(models.Polls)
 admin.site.register(models.Messages)
+admin.site.register(models.ExamDetails)

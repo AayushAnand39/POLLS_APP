@@ -8,6 +8,7 @@ import json
 from collections import OrderedDict
 import urllib.parse
 from django.db.models import Q
+from datetime import datetime
 
 # Create your views here.
 def index(request):
@@ -225,6 +226,19 @@ def createexam(request, email):
     else:
         return render(request,"Login.html")
 
+def sendData(request):
+    if request.method == "POST":
+        data = json.loads(request.body).get("formData")
+        date_str = data.get("date")
+        start_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        details = models.ExamDetails(name = data.get("name"), email = data.get("email"), institution = data.get("institution"), phonenumber = data.get("phonenumber"), numberOfQuestions = data.get("number"), startDate = start_date, startTime = data.get("starttime"), endTime = data.get("endtime"), description = data.get("description"))
+        details.save()
+        examid = models.ExamDetails.objects.filter(email = data.get("email")).order_by("-examid").first().examid
+        print(examid)
+        print(data)
+        return JsonResponse({"message" : "Data received successfully", "data" : data, "examid" : examid}, status=200)
+    else:
+        return JsonResponse({"error": "error"}, status=400)
     
 def logout(request, email):
     email = urllib.parse.unquote(email)

@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 import random
+from datetime import date, time
 
 # Create your models here.
 class User(models.Model):
@@ -40,7 +41,7 @@ class ExamDetails(models.Model):
     institution = models.CharField(max_length=200)
     phonenumber = models.CharField(max_length=11)
     numberOfQuestions = models.IntegerField(default=0)
-    startDate = models.DateField(default="0000-00-00")
-    startTime = models.TimeField(default="00:00")
-    endTime = models.TimeField(default="00:00")
+    startDate = models.DateField(default=date.today)
+    startTime = models.TimeField(default=time(0, 0))
+    endTime = models.TimeField(default=time(0, 0))
     description = models.CharField(max_length=5000)

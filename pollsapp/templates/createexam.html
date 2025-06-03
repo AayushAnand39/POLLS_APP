@@ -36,8 +36,36 @@
     </div>
 </body>
 <script>
+    const getCookie = (name) => {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let cookie of cookies) {
+                cookie = cookie.trim();
+                if (cookie.startsWith(name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
     const createExamQuestions = (event) => {
         event.preventDefault();
+        const data = new FormData(event.target);
+        const dataObj = Object.fromEntries(data.entries())
+        console.log(data)
+        fetch("/send-data/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                formData : dataObj
+            })
+        }).then(response => response.json())
         console.log("Exam registration successful. Proceed for question creation.");
         const questions = document.querySelector(".questions");
         const count = parseInt(document.getElementById("number").value);
@@ -47,14 +75,18 @@
             if (i >= 0 && i < count) {
                 questions.innerHTML = `
                     <h4>Question ${i + 1}</h4>
-                    <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
-                    <input type="option1" name="option1" id="option1" placeholder="Enter option 1">
-                    <input type="option2" name="option2" id="option2" placeholder="Enter option 2">
-                    <input type="option3" name="option3" id="option3" placeholder="Enter option 3">
-                    <input type="option4" name="option4" id="option4" placeholder="Enter option 4">
-                    <input type="number" name="positive" id="positive" placeholder="Enter score to be awarded for correct answer">
-                    <input type="number" name="negative" id="negative" placeholder="Enter score to be awarded for wrong answer">
-                    <input type="number" name="correct" id="correct" placeholder="Enter the correct option">
+                    <form onsubmit="return sendQuestion(event)">
+                        {% csrf_token %}
+                        <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
+                        <input type="text" name="option1" id="option1" placeholder="Enter option 1">
+                        <input type="text" name="option2" id="option2" placeholder="Enter option 2">
+                        <input type="text" name="option3" id="option3" placeholder="Enter option 3">
+                        <input type="text" name="option4" id="option4" placeholder="Enter option 4">
+                        <input type="number" name="positive" id="positive" placeholder="Enter score to be awarded for correct answer">
+                        <input type="number" name="negative" id="negative" placeholder="Enter score to be awarded for wrong answer">
+                        <input type="number" name="correct" id="correct" placeholder="Enter the correct option">
+                        <input type="submit" id="save" value="Save"><br>
+                    </form>
                     <button id="clickprevious" ${i === 0 ? "disabled" : ""}>Previous</button>
                     <button id="clicknext">Next</button>
                 `;
@@ -81,5 +113,11 @@
             }
         }
     };
+
+    const sendQuestion = (event)=>{
+        event.preventDefault();
+        const data = event.target;
+        console.log(data)
+    }
 </script>
 </html>

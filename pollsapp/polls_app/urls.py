@@ -15,4 +15,5 @@ urlpatterns = [
     path("get-chats/",views.get_chats,name="get-chats"),
     path("official/<str:email>",views.official,name="official"),
     path("createexam/<str:email>",views.createexam,name="createexam"),
+    path("send-data/",views.sendData,name="send-data")
 ]
