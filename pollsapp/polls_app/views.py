@@ -240,6 +240,17 @@ def sendData(request):
     else:
         return JsonResponse({"error": "error"}, status=400)
     
+def sendExamQuestion(request):
+    if request.method == "POST":
+        generalData = json.loads(request.body).get("questionnumber")
+        data = json.loads(request.body).get("formData")
+        print(data)
+        examQuestion = models.ExamQuestions(questionnumber = generalData, examid = 0, question = data.get("question"), option1 = data.get("option1"), option2 = data.get("option2"), option3 = data.get("option3"), option4 = data.get("option4"), positiveScore = data.get("positive"), negativeScore = data.get("negative"), correctOption = data.get("correct"))
+        examQuestion.save()
+        return JsonResponse({"message" : "Question data received successfully", "data" : data, "generalData" : generalData}, status=200)
+    else:
+        return JsonResponse({"error": "error"}, status=400) 
+    
 def logout(request, email):
     email = urllib.parse.unquote(email)
     user = models.User.objects.get(email = email)

@@ -45,3 +45,16 @@ class ExamDetails(models.Model):
     startTime = models.TimeField(default=time(0, 0))
     endTime = models.TimeField(default=time(0, 0))
     description = models.CharField(max_length=5000)
+
+class ExamQuestions(models.Model):
+    questionid = models.BigAutoField(primary_key=True)
+    questionnumber = models.IntegerField(default=0)
+    examid = models.IntegerField(default=0)
+    question = models.CharField(max_length=5000)
+    option1 = models.CharField(max_length=5000)
+    option2 = models.CharField(max_length=5000)
+    option3 = models.CharField(max_length=5000)
+    option4 = models.CharField(max_length=5000)
+    positiveScore = models.IntegerField(default=0)
+    negativeScore = models.IntegerField(default=0)
+    correctOption = models.IntegerField(default=0)

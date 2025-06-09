@@ -36,6 +36,7 @@
     </div>
 </body>
 <script>
+    const examid = 0;
     const getCookie = (name) => {
         let cookieValue = null;
         if (document.cookie && document.cookie !== "") {
@@ -75,7 +76,7 @@
             if (i >= 0 && i < count) {
                 questions.innerHTML = `
                     <h4>Question ${i + 1}</h4>
-                    <form onsubmit="return sendQuestion(event)">
+                    <form onsubmit="return sendQuestion(event, ${i+1})">
                         {% csrf_token %}
                         <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
                         <input type="text" name="option1" id="option1" placeholder="Enter option 1">
@@ -114,10 +115,21 @@
         }
     };
 
-    const sendQuestion = (event)=>{
+    const sendQuestion = (event, questionnumber)=>{
         event.preventDefault();
-        const data = event.target;
-        console.log(data)
+        const data = new FormData(event.target);
+        const dataObj = Object.fromEntries(data.entries())
+        fetch("/send-exam-question/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+                questionnumber : questionnumber,
+                formData : dataObj
+            })
+        }).then(response => response.json())
     }
 </script>
 </html>
