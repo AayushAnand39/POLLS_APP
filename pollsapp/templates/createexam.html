@@ -17,7 +17,7 @@
     <div class="officialsection">
         <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
         <a href="/conductvote">CONDUCT A VOTE</a>
-        <a href="/attendexam">ATTEND EXAMINATION</a>
+        <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
     </div>
     <div class="questions">
         <form action="{% url 'createexam' email=email %}" method="post" onsubmit="return createExamQuestions(event)">
@@ -36,7 +36,6 @@
     </div>
 </body>
 <script>
-    const examid = 0;
     const getCookie = (name) => {
         let cookieValue = null;
         if (document.cookie && document.cookie !== "") {
@@ -53,6 +52,7 @@
     }
 
     const createExamQuestions = (event) => {
+        let examid = 0;
         event.preventDefault();
         const data = new FormData(event.target);
         const dataObj = Object.fromEntries(data.entries())
@@ -66,7 +66,9 @@
             body: JSON.stringify({
                 formData : dataObj
             })
-        }).then(response => response.json())
+        }).then(response => response.json()).then(data => {
+            examid = data.examid;
+        })
         console.log("Exam registration successful. Proceed for question creation.");
         const questions = document.querySelector(".questions");
         const count = parseInt(document.getElementById("number").value);
@@ -75,8 +77,9 @@
         function renderQuestion() {
             if (i >= 0 && i < count) {
                 questions.innerHTML = `
+                    <h4>Exam id: ${examid}</h4>
                     <h4>Question ${i + 1}</h4>
-                    <form onsubmit="return sendQuestion(event, ${i+1})">
+                    <form onsubmit="return sendQuestion(event, ${i+1}, ${examid})">
                         {% csrf_token %}
                         <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
                         <input type="text" name="option1" id="option1" placeholder="Enter option 1">
@@ -115,7 +118,7 @@
         }
     };
 
-    const sendQuestion = (event, questionnumber)=>{
+    const sendQuestion = (event, questionnumber, examid)=>{
         event.preventDefault();
         const data = new FormData(event.target);
         const dataObj = Object.fromEntries(data.entries())
@@ -126,6 +129,7 @@
                 "X-CSRFToken": getCookie("csrftoken")
             },
             body: JSON.stringify({
+                examid : examid,
                 questionnumber : questionnumber,
                 formData : dataObj
             })

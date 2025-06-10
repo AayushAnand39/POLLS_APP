@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attend Exmaination</title>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+        <a href="{% url 'post' email=email %}">POST</a>
+        <a href="{% url 'chat' email=email %}">CHAT</a>
+        <a href="{% url 'official' email=email %}">OFFICIAL</a>
+        <a href="/profile">PROFILE</a>
+        <a href="{% url 'logout' email=email %}">LOGOUT</a>
+    </div>
+    <div class="officialsection">
+        <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
+        <a href="/conductvote">CONDUCT A VOTE</a>
+        <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+    </div>
+
+</body>
+</html>

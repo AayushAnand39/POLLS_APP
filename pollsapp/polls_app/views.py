@@ -242,12 +242,13 @@ def sendData(request):
     
 def sendExamQuestion(request):
     if request.method == "POST":
-        generalData = json.loads(request.body).get("questionnumber")
+        questionnumber = json.loads(request.body).get("questionnumber")
+        examid = json.loads(request.body).get("examid")
         data = json.loads(request.body).get("formData")
         print(data)
-        examQuestion = models.ExamQuestions(questionnumber = generalData, examid = 0, question = data.get("question"), option1 = data.get("option1"), option2 = data.get("option2"), option3 = data.get("option3"), option4 = data.get("option4"), positiveScore = data.get("positive"), negativeScore = data.get("negative"), correctOption = data.get("correct"))
+        examQuestion = models.ExamQuestions(questionnumber = questionnumber, examid = examid, question = data.get("question"), option1 = data.get("option1"), option2 = data.get("option2"), option3 = data.get("option3"), option4 = data.get("option4"), positiveScore = data.get("positive"), negativeScore = data.get("negative"), correctOption = data.get("correct"))
         examQuestion.save()
-        return JsonResponse({"message" : "Question data received successfully", "data" : data, "generalData" : generalData}, status=200)
+        return JsonResponse({"message" : "Question data received successfully", "data" : data, "questionnumber" : questionnumber, "examid" : examid}, status=200)
     else:
         return JsonResponse({"error": "error"}, status=400) 
     
