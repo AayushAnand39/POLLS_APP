@@ -17,7 +17,7 @@
     <div class="officialsection">
         <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
         <a href="/conductvote">CONDUCT A VOTE</a>
-        <a href="/attendexam">ATTEND EXAMINATION</a>
+        <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
     </div>
 </body>
 </html>

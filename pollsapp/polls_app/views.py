@@ -9,6 +9,7 @@ from collections import OrderedDict
 import urllib.parse
 from django.db.models import Q
 from datetime import datetime
+from django.forms.models import model_to_dict
 
 # Create your views here.
 def index(request):
@@ -249,6 +250,36 @@ def sendExamQuestion(request):
         examQuestion = models.ExamQuestions(questionnumber = questionnumber, examid = examid, question = data.get("question"), option1 = data.get("option1"), option2 = data.get("option2"), option3 = data.get("option3"), option4 = data.get("option4"), positiveScore = data.get("positive"), negativeScore = data.get("negative"), correctOption = data.get("correct"))
         examQuestion.save()
         return JsonResponse({"message" : "Question data received successfully", "data" : data, "questionnumber" : questionnumber, "examid" : examid}, status=200)
+    else:
+        return JsonResponse({"error": "error"}, status=400) 
+    
+def attendexam(request, email):
+    user = models.User.objects.get(email = email)
+    if user.logintime == user.logouttime:
+        return render(request,"attendexam.html",{"email":email})
+    else:
+        return render(request,"Login.html")
+    
+def loadExam(request):
+    if request.method == "POST":
+        examid = json.loads(request.body).get("examid")
+        examdetails = models.ExamDetails.objects.get(examid = examid)
+        examDetails = model_to_dict(examdetails)
+        examquestiondetails = models.ExamQuestions.objects.filter(examid = examid).order_by("questionnumber")
+        examquestions = []
+        for details in examquestiondetails:
+            examquestions.append({
+                "questionnumber" : details.questionnumber,
+                "question" : details.question,
+                "option1" : details.option1,
+                "option2" : details.option2,
+                "option3" : details.option3,
+                "option4" : details.option4,
+                "positive" : details.positiveScore,
+                "negative" : details.negativeScore,
+                "correctoption" : details.correctOption
+            })
+        return JsonResponse({"message" : "Questions loaded successfully", "examquestions" : examquestions, "examid" : examid, "examdetails" : examDetails}, status=200)
     else:
         return JsonResponse({"error": "error"}, status=400) 
     

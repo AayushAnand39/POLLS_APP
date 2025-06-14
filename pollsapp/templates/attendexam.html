@@ -19,6 +19,82 @@
         <a href="/conductvote">CONDUCT A VOTE</a>
         <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
     </div>
-
+    <div class="exampanel">
+        <form onsubmit="return loadExam(event)">
+            <input type="number" name="examid" id="examid" placeholder="Enter the examination id">
+            <input type="submit" value="Verify">
+        </form>
+    </div>
 </body>
+<script>
+    const getCookie = (name) => {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let cookie of cookies) {
+                cookie = cookie.trim();
+                if (cookie.startsWith(name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const loadExam = (event)=>{
+        event.preventDefault();
+        const data = new FormData(event.target);
+        const dataObj = Object.fromEntries(data.entries());
+        fetch("/get-exam/",{
+            method : "POST",
+            headers: {
+                "Content-type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body : JSON.stringify({
+                examid : dataObj.examid
+            })
+        }).then(response => response.json()).then(data => {
+            let i = 0;
+            let totalPoints = 0;
+            const numberOfQuestions = data.examdetails.numberOfQuestions;
+            let examData = data.examquestions;
+            const panel = document.querySelector(".exampanel");
+            displayQuestion();
+            function displayQuestion(){
+                if (i>=0 && i<numberOfQuestions){
+                    panel.innerHTML = `
+                        <h3>Total Score: ${totalPoints}</h3>
+                        <h3>Question: ${examData[i].questionnumber}</h3>
+                        <h4>${examData[i].question}</h4>
+                        <button>Option 1: ${examData[i].option1}</button><br>
+                        <button>Option 2: ${examData[i].option2}</button><br>
+                        <button>Option 3: ${examData[i].option3}</button><br>
+                        <button>Option 4: ${examData[i].option4}</button><br>
+                        <button id="previous" ${i === 0 ? "disabled" : ""}>Previous</button><br>
+                        <button id="next">Next</button>
+                    `
+                    document.getElementById("previous").addEventListener("click",()=>{
+                        if (i>0){
+                            i--;
+                            displayQuestion();
+                        }
+                    });
+                    document.getElementById("next").addEventListener("click",()=>{
+                        i++;
+                        displayQuestion();
+                    })
+                }
+                else if (i==numberOfQuestions){
+                    panel.innerHTML = `
+                        <h3>Thank you for attending the exam.</h3>
+                        <h3>Your total score is: ${totalPoints}</h3>
+                    `
+                }
+            }
+            // displayQuestion();
+        })
+    }
+</script>
 </html>

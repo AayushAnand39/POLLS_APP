@@ -16,5 +16,7 @@ urlpatterns = [
     path("official/<str:email>",views.official,name="official"),
     path("createexam/<str:email>",views.createexam,name="createexam"),
     path("send-data/",views.sendData,name="send-data"),
-    path("send-exam-question/",views.sendExamQuestion,name="send-exam-question")
+    path("send-exam-question/",views.sendExamQuestion,name="send-exam-question"),
+    path("attendexam/<str:email>",views.attendexam,name="attendexam"),
+    path("get-exam/",views.loadExam,name="loadExam")
 ]

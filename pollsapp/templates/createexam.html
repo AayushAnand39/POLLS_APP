@@ -51,8 +51,8 @@
         return cookieValue;
     }
 
+    let examid = 0;
     const createExamQuestions = (event) => {
-        let examid = 0;
         event.preventDefault();
         const data = new FormData(event.target);
         const dataObj = Object.fromEntries(data.entries())
@@ -79,7 +79,7 @@
                 questions.innerHTML = `
                     <h4>Exam id: ${examid}</h4>
                     <h4>Question ${i + 1}</h4>
-                    <form onsubmit="return sendQuestion(event, ${i+1}, ${examid})">
+                    <form onsubmit="return sendQuestion(event, ${i+1})">
                         {% csrf_token %}
                         <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
                         <input type="text" name="option1" id="option1" placeholder="Enter option 1">
@@ -118,7 +118,7 @@
         }
     };
 
-    const sendQuestion = (event, questionnumber, examid)=>{
+    const sendQuestion = (event, questionnumber)=>{
         event.preventDefault();
         const data = new FormData(event.target);
         const dataObj = Object.fromEntries(data.entries())
