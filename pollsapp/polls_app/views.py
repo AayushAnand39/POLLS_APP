@@ -241,17 +241,49 @@ def sendData(request):
     else:
         return JsonResponse({"error": "error"}, status=400)
     
+@csrf_exempt
 def sendExamQuestion(request):
-    if request.method == "POST":
-        questionnumber = json.loads(request.body).get("questionnumber")
-        examid = json.loads(request.body).get("examid")
-        data = json.loads(request.body).get("formData")
-        print(data)
-        examQuestion = models.ExamQuestions(questionnumber = questionnumber, examid = examid, question = data.get("question"), option1 = data.get("option1"), option2 = data.get("option2"), option3 = data.get("option3"), option4 = data.get("option4"), positiveScore = data.get("positive"), negativeScore = data.get("negative"), correctOption = data.get("correct"))
-        examQuestion.save()
-        return JsonResponse({"message" : "Question data received successfully", "data" : data, "questionnumber" : questionnumber, "examid" : examid}, status=200)
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request"}, status=400)
+
+    payload = json.loads(request.body)
+    examid         = payload.get("examid")
+    questionnumber = payload.get("questionnumber")
+    data           = payload.get("formData", {})
+    pk             = payload.get("pk")  # may be None
+
+    # If the client already told us which PK to update, use it:
+    if pk:
+        try:
+            eq = models.ExamQuestions.objects.get(pk=pk, examid=examid)
+        except models.ExamQuestions.DoesNotExist:
+            return JsonResponse({"error": "Question not found"}, status=404)
     else:
-        return JsonResponse({"error": "error"}, status=400) 
+        # Otherwise try to find an existing one by examid+questionnumber:
+        eq, created = models.ExamQuestions.objects.get_or_create(
+            examid=examid,
+            questionnumber=questionnumber,
+            defaults={}
+        )
+
+    # Now update all fields from incoming data:
+    eq.question      = data.get("question",      eq.question)
+    eq.option1       = data.get("option1",       eq.option1)
+    eq.option2       = data.get("option2",       eq.option2)
+    eq.option3       = data.get("option3",       eq.option3)
+    eq.option4       = data.get("option4",       eq.option4)
+    eq.positiveScore = data.get("positive",      eq.positiveScore)
+    eq.negativeScore = data.get("negative",      eq.negativeScore)
+    eq.correctOption = data.get("correct",       eq.correctOption)
+    eq.save()
+
+    return JsonResponse({
+        "message":        "Question saved successfully",
+        "examid":         examid,
+        "questionnumber": questionnumber,
+        "pk":             eq.pk
+    }, status=200)
+
     
 def attendexam(request, email):
     user = models.User.objects.get(email = email)

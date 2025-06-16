@@ -36,104 +36,177 @@
     </div>
 </body>
 <script>
-    const getCookie = (name) => {
+  // CSRF helper (unchanged)
+    function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== "") {
-            const cookies = document.cookie.split(";");
-            for (let cookie of cookies) {
-                cookie = cookie.trim();
-                if (cookie.startsWith(name + "=")) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
+            document.cookie.split(";").forEach(c => {
+                c = c.trim();
+                if (c.startsWith(name + "=")) {
+                cookieValue = decodeURIComponent(c.slice(name.length + 1));
                 }
-            }
+            });
         }
         return cookieValue;
     }
 
-    let examid = 0;
-    const createExamQuestions = (event) => {
-        event.preventDefault();
-        const data = new FormData(event.target);
-        const dataObj = Object.fromEntries(data.entries())
-        console.log(data)
-        fetch("/send-data/",{
-            method : "POST",
+  // In‑memory state, plus metadata
+    let examid         = null;
+    let questionCount  = 0;
+    let currentIndex   = 1;
+    let metadata       = {};     // { name, email, institution, phonenumber, number, date, starttime, endtime, description }
+    const questionsCache = {};   // questionsCache[q] = {...}
+    const questionPK     = {};   // questionPK[q] = db pk
+
+    function persistState() {
+        sessionStorage.setItem("metadata",      JSON.stringify(metadata));
+        sessionStorage.setItem("examid",        examid);
+        sessionStorage.setItem("questionCount", questionCount);
+        sessionStorage.setItem("currentIndex",  currentIndex);
+        sessionStorage.setItem("questionsCache",JSON.stringify(questionsCache));
+        sessionStorage.setItem("questionPK",    JSON.stringify(questionPK));
+    }
+
+    function restoreState() {
+        const m = sessionStorage.getItem("metadata");
+        if (!m) return false;
+        metadata       = JSON.parse(m);
+        examid         = sessionStorage.getItem("examid");
+        questionCount  = parseInt(sessionStorage.getItem("questionCount"), 10);
+        currentIndex   = parseInt(sessionStorage.getItem("currentIndex"), 10);
+        Object.assign(questionsCache, JSON.parse(sessionStorage.getItem("questionsCache")  || "{}"));
+        Object.assign(questionPK,     JSON.parse(sessionStorage.getItem("questionPK")      || "{}"));
+        return true;
+    }
+
+    // initial metadata form submit
+    async function createExamQuestions(e) {
+        e.preventDefault();
+        metadata = Object.fromEntries(new FormData(e.target).entries());
+        questionCount = parseInt(metadata.number, 10);
+
+        // send metadata
+        const resp = await fetch("/send-data/", {
+            method: "POST",
             headers: {
-                "Content-type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
+                "Content-Type":"application/json",
+                "X-CSRFToken":getCookie("csrftoken")
             },
-            body: JSON.stringify({
-                formData : dataObj
-            })
-        }).then(response => response.json()).then(data => {
-            examid = data.examid;
-        })
-        console.log("Exam registration successful. Proceed for question creation.");
-        const questions = document.querySelector(".questions");
-        const count = parseInt(document.getElementById("number").value);
-        let i = 0;
-        renderQuestion();
-        function renderQuestion() {
-            if (i >= 0 && i < count) {
-                questions.innerHTML = `
-                    <h4>Exam id: ${examid}</h4>
-                    <h4>Question ${i + 1}</h4>
-                    <form onsubmit="return sendQuestion(event, ${i+1})">
-                        {% csrf_token %}
-                        <input type="text" name="question" id="question${i+1}" placeholder="Enter the question">
-                        <input type="text" name="option1" id="option1" placeholder="Enter option 1">
-                        <input type="text" name="option2" id="option2" placeholder="Enter option 2">
-                        <input type="text" name="option3" id="option3" placeholder="Enter option 3">
-                        <input type="text" name="option4" id="option4" placeholder="Enter option 4">
-                        <input type="number" name="positive" id="positive" placeholder="Enter score to be awarded for correct answer">
-                        <input type="number" name="negative" id="negative" placeholder="Enter score to be awarded for wrong answer">
-                        <input type="number" name="correct" id="correct" placeholder="Enter the correct option">
-                        <input type="submit" id="save" value="Save"><br>
-                    </form>
-                    <button id="clickprevious" ${i === 0 ? "disabled" : ""}>Previous</button>
-                    <button id="clicknext">Next</button>
-                `;
-                document.getElementById("clicknext").addEventListener("click", () => {
-                    i++;
-                    renderQuestion();
-                });
-                document.getElementById("clickprevious").addEventListener("click", () => {
-                    if (i > 0) {
-                        i--;
-                        renderQuestion();
-                    }
-                });
-            } 
-            else if (i === count) {
-                questions.innerHTML = `
-                    <h3>Thank you for creating the questions</h3>
-                    <button id="goback">Go Back</button>
-                `;
-                document.getElementById("goback").addEventListener("click", () => {
-                    i = count - 1;
-                    renderQuestion();
+            body: JSON.stringify({ formData: metadata })
+        });
+        const js = await resp.json();
+        examid = js.examid;
+
+        // init empty question slots
+        for (let i = 1; i <= questionCount; i++) {
+            questionsCache[i] = {
+                question: "", option1: "", option2: "",
+                option3: "", option4: "",
+                positive: "", negative: "", correct: ""
+            };
+        }
+
+        persistState();
+        renderQuestion(1);
+    }
+
+    // render question #q
+    function renderQuestion(q) {
+        currentIndex = q;
+        persistState();
+
+        const slot = questionsCache[q] || {};
+        const cont = document.querySelector(".questions");
+        cont.innerHTML = `
+        <h4>Exam ID: ${examid}</h4>
+        <h4>Question ${q} of ${questionCount}</h4>
+        <form id="qform">
+            <input type="text"   name="question"  value="${slot.question}" placeholder="Question"><br>
+            <input type="text"   name="option1"   value="${slot.option1}"  placeholder="Option 1"><br>
+            <input type="text"   name="option2"   value="${slot.option2}"  placeholder="Option 2"><br>
+            <input type="text"   name="option3"   value="${slot.option3}"  placeholder="Option 3"><br>
+            <input type="text"   name="option4"   value="${slot.option4}"  placeholder="Option 4"><br>
+            <input type="number" name="positive"  value="${slot.positive}" placeholder="Score +ve"><br>
+            <input type="number" name="negative"  value="${slot.negative}" placeholder="Score –ve"><br>
+            <input type="number" name="correct"   value="${slot.correct}"  placeholder="Correct option (1–4)"><br>
+            <button type="submit">Save</button>
+        </form>
+        <button id="prevBtn" ${q===1 ? "disabled" : ""}>Previous</button>
+        ${
+            q < questionCount
+            ? `<button id="nextBtn">Next</button>`
+            : `
+            <button id="verifyBtn">Verify Details</button>
+            <button id="submitBtn">Submit Exam</button>
+            `
+        }
+        `;
+
+        // handlers
+        document.getElementById("qform").onsubmit = e => sendQuestion(e, q);
+        if (q > 1) document.getElementById("prevBtn").onclick = () => renderQuestion(q-1);
+        if (q < questionCount) document.getElementById("nextBtn").onclick = () => renderQuestion(q+1);
+        else {
+            // On last question: Verify and Submit
+            document.getElementById("verifyBtn").onclick = () => {
+                // clear question state, keep metadata
+                sessionStorage.removeItem("examid");
+                sessionStorage.removeItem("questionCount");
+                sessionStorage.removeItem("currentIndex");
+                sessionStorage.removeItem("questionsCache");
+                sessionStorage.removeItem("questionPK");
+                // reload to show metadata form prefilled
+                window.location.reload();
+            };
+            document.getElementById("submitBtn").onclick = () => {
+                // final submit: clear all and go to dashboard
+                sessionStorage.clear();
+                window.location.href = "{% url 'dashboard' email=email %}";
+            };
+        }
+    }
+
+    // save or update a question
+    async function sendQuestion(e, qnum) {
+        e.preventDefault();
+        const dataObj = Object.fromEntries(new FormData(e.target).entries());
+        questionsCache[qnum] = dataObj;
+        persistState();
+
+        const payload = { examid, questionnumber: qnum, formData: dataObj };
+        if (questionPK[qnum]) payload.pk = questionPK[qnum];
+
+        const resp = await fetch("/send-exam-question/", {
+            method: "POST",
+            headers: {
+                "Content-Type":"application/json",
+                "X-CSRFToken":getCookie("csrftoken")
+            },
+            body: JSON.stringify(payload)
+        });
+        const js = await resp.json();
+        if (js.pk) {
+            questionPK[qnum] = js.pk;
+            persistState();
+        }
+        alert(`Question ${qnum} saved!`);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        if (restoreState()) renderQuestion(currentIndex);
+        else {
+        // first‑time: metadata form
+            document.querySelector("form").onsubmit = createExamQuestions;
+            // if you had saved metadata previously, prefill it:
+            const saved = sessionStorage.getItem("metadata");
+            if (saved) {
+                const m = JSON.parse(saved);
+                Object.entries(m).forEach(([k,v])=>{
+                const inp = document.getElementById(k);
+                if (inp) inp.value = v;
                 });
             }
         }
-    };
-
-    const sendQuestion = (event, questionnumber)=>{
-        event.preventDefault();
-        const data = new FormData(event.target);
-        const dataObj = Object.fromEntries(data.entries())
-        fetch("/send-exam-question/",{
-            method : "POST",
-            headers: {
-                "Content-type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({
-                examid : examid,
-                questionnumber : questionnumber,
-                formData : dataObj
-            })
-        }).then(response => response.json())
-    }
+    });
 </script>
-</html>
+</html> 

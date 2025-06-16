@@ -39,94 +39,138 @@
         <div class="textArea"></div>
     </div>
 </body>
+
 <script>
-    const senderEmail = `{{ email }}`
-    const getCookie = (name) => {
+    const senderEmail = `{{ email }}`;
+    let currentReceiver = null;
+    const renderedKeys = new Set();
+
+    function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== "") {
-            const cookies = document.cookie.split(";");
-            for (let cookie of cookies) {
-                cookie = cookie.trim();
-                if (cookie.startsWith(name + "=")) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
+            document.cookie.split(";").forEach(c => {
+                c = c.trim();
+                if (c.startsWith(name + "=")) {
+                cookieValue = decodeURIComponent(c.slice(name.length + 1));
                 }
-            }
+            });
         }
         return cookieValue;
     }
-    const userSearch = ()=>{
-        const input = document.getElementById("name").value
-        fetch("/chat-search/",{
-            method : "POST",
-            headers: {
-                "Content-type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({
-                name: input
-            })
-        }).then(response => response.json()).then(data=>{
-            const searchedUsers = document.querySelector(".searchedUsers")
-            searchedUsers.innerHTML = data.results.map(user=>{
-                return `<div class="user" id="${user.email}">
-                            ${user.name}
-                            <button onclick="startChat('${user.email}')">Start Chat</button>
-                        </div>
-                `
-            }).join("")
-        })
+
+    function messageKey(m) {
+        return `${m.senderemail}|${m.time}|${m.message}`;
     }
 
-    const startChat = (receiverEmail)=>{
-        const nameArea = document.querySelector(".namearea")
-        nameArea.innerHTML = `<h3>${receiverEmail}</h3>`
-        fetch("/get-chats/",{
-            method : "POST",
+    function fetchChats() {
+        if (!currentReceiver) return;
+
+        fetch("/get-chats/", {
+            method: "POST",
             headers: {
-                "Content-type": "application/json",
+                "Content-Type": "application/json",
                 "X-CSRFToken": getCookie("csrftoken")
             },
             body: JSON.stringify({
-                senderEmail: senderEmail,
-                receiverEmail: receiverEmail
+                senderEmail,
+                receiverEmail: currentReceiver
             })
-        }).then(response => response.json()).then(data=>{
-            const chatsArea = document.querySelector(".chatsarea")
-            chatsArea.innerHTML = data.messages.map(chat=>{
-                return `${chat.senderemail === senderEmail ?
-                        `<div class="chat" style="background-color: #d1e7dd;">
-                            <h4>You</h4>
-                            <p style="text-align:right">${chat.message}</p>
-                        </div>` :
-                        `<div class="chat" style="background-color: #f8d7da;">
-                            <h4>${chat.senderemail}</h4>
-                            <p style="text-align:left">${chat.message}</p>
-                        </div>`
-                    }`
-            }).join("")
         })
-        const textArea = document.querySelector(".textArea")
-        textArea.innerHTML = `<textarea id="message" placeholder="Message"></textarea>
-                            <button onclick="sendMessage('${receiverEmail}')">Send</button>
-                            `
+        .then(res => res.json())
+        .then(data => {
+            const area = document.querySelector(".chatsarea");
+            data.messages.forEach(msg => {
+                const key = messageKey(msg);
+                if (renderedKeys.has(key)) return; 
+                renderedKeys.add(key);
+
+                const wrapper = document.createElement("div");
+                wrapper.className = "chat";
+                wrapper.style.backgroundColor =
+                msg.senderemail === senderEmail ? "#d1e7dd" : "#f8d7da";
+
+                const who = document.createElement("h4");
+                who.textContent =
+                msg.senderemail === senderEmail ? "You" : msg.senderemail;
+
+                const text = document.createElement("p");
+                text.textContent = msg.message;
+                text.style.textAlign =
+                msg.senderemail === senderEmail ? "right" : "left";
+
+                wrapper.append(who, text);
+                area.append(wrapper);
+            });
+
+            area.scrollTop = area.scrollHeight;
+        })
+        .catch(console.error);
     }
 
-    const sendMessage = (receiverEmail)=>{
-        const message = document.getElementById("message").value
-        fetch("/send-message/",{
+    setInterval(fetchChats, 2000);
+
+    function userSearch() {
+        const input = document.getElementById("name").value;
+        fetch("/chat-search/", {
             method : "POST",
             headers: {
-                "Content-type": "application/json",
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({ name: input })
+        })
+        .then(res => res.json())
+        .then(data => {
+        const list = document.querySelector(".searchedUsers");
+        list.innerHTML = data.results.map(u => `
+            <div class="user" id="${u.email}">
+            ${u.name}
+            <button onclick="startChat('${u.email}')">Start Chat</button>
+            </div>
+        `).join("");
+        })
+        .catch(console.error);
+  }
+
+  function startChat(receiverEmail) {
+        currentReceiver = receiverEmail;
+        renderedKeys.clear();
+
+        document.querySelector(".namearea").innerHTML = `<h3>${receiverEmail}</h3>`;
+        document.querySelector(".chatsarea").innerHTML = "";
+        document.querySelector(".textArea").innerHTML = `
+            <textarea id="message" placeholder="Type your message"></textarea>
+            <button id="sendBtn">Send</button>
+        `;
+
+        document.getElementById("sendBtn").onclick = () => sendMessage(receiverEmail);
+
+        fetchChats();
+    }
+
+    function sendMessage(receiverEmail) {
+        const input = document.getElementById("message");
+        const message = input.value.trim();
+        if (!message) return;
+
+        fetch("/send-message/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
                 "X-CSRFToken": getCookie("csrftoken")
             },
             body: JSON.stringify({
-                message: message,
-                receiverEmail: receiverEmail,
-                senderEmail: senderEmail
+                senderEmail,
+                receiverEmail,
+                message
             })
-        }).then(response => response.json())
-        window.location.reload()
+        })
+        .then(res => res.json())
+        .then(() => {
+            input.value = "";
+            fetchChats();
+        })
+        .catch(console.error);
     }
 </script>
 </html>

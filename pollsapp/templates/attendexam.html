@@ -42,6 +42,7 @@
         return cookieValue;
     }
 
+    let totalPoints = 0;
     const loadExam = (event)=>{
         event.preventDefault();
         const data = new FormData(event.target);
@@ -57,7 +58,6 @@
             })
         }).then(response => response.json()).then(data => {
             let i = 0;
-            let totalPoints = 0;
             const numberOfQuestions = data.examdetails.numberOfQuestions;
             let examData = data.examquestions;
             const panel = document.querySelector(".exampanel");
@@ -68,10 +68,10 @@
                         <h3>Total Score: ${totalPoints}</h3>
                         <h3>Question: ${examData[i].questionnumber}</h3>
                         <h4>${examData[i].question}</h4>
-                        <button>Option 1: ${examData[i].option1}</button><br>
-                        <button>Option 2: ${examData[i].option2}</button><br>
-                        <button>Option 3: ${examData[i].option3}</button><br>
-                        <button>Option 4: ${examData[i].option4}</button><br>
+                        <button id="${data.examid}.${examData[i].questionnumber}.1" onclick="validate(this.id, ${examData[i].correctoption}, ${examData[i].positive}, ${examData[i].negative})">Option 1: ${examData[i].option1}</button><br>
+                        <button id="${data.examid}.${examData[i].questionnumber}.2" onclick="validate(this.id, ${examData[i].correctoption}, ${examData[i].positive}, ${examData[i].negative})">Option 2: ${examData[i].option2}</button><br>
+                        <button id="${data.examid}.${examData[i].questionnumber}.3" onclick="validate(this.id, ${examData[i].correctoption}, ${examData[i].positive}, ${examData[i].negative})">Option 3: ${examData[i].option3}</button><br>
+                        <button id="${data.examid}.${examData[i].questionnumber}.4" onclick="validate(this.id, ${examData[i].correctoption}, ${examData[i].positive}, ${examData[i].negative})">Option 4: ${examData[i].option4}</button><br>
                         <button id="previous" ${i === 0 ? "disabled" : ""}>Previous</button><br>
                         <button id="next">Next</button>
                     `
@@ -93,8 +93,26 @@
                     `
                 }
             }
-            // displayQuestion();
         })
+    }
+
+    const validate = (id, correctOption, positive, negative)=>{
+        const selectedOption = id.split('.')[2];
+        console.log(selectedOption)
+        console.log(correctOption)
+        if (selectedOption == correctOption){
+            document.getElementById(`${id}`).style = "background-color:green"
+            totalPoints+=positive;
+        }
+        else{
+            document.getElementById(`${id}`).style = "background-color:red"
+            totalPoints+=negative;
+        }
+        document.getElementById(`${id.split('.')[0]}.${id.split('.')[1]}.1`).disabled = true;
+        document.getElementById(`${id.split('.')[0]}.${id.split('.')[1]}.2`).disabled = true;
+        document.getElementById(`${id.split('.')[0]}.${id.split('.')[1]}.3`).disabled = true;
+        document.getElementById(`${id.split('.')[0]}.${id.split('.')[1]}.4`).disabled = true;
+        console.log(totalPoints)
     }
 </script>
 </html>
