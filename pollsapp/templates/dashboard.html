@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
+    <style>
+        .poll-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5em;
+        }
+        .poll-header img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 8px;
+        }
+        .vote-btn {
+            margin-right: 8px;
+        }
+    </style>
 </head>
 <body>
     <div class="navbar">
@@ -14,60 +31,147 @@
         <a href="/profile">PROFILE</a>
         <a href="{% url 'logout' email=email %}">LOGOUT</a>
     </div>
-    {% for questions in questionsData %}
-        <h3>{{questions.authoremail}}</h3>
-        <h2>{{questions.question}}</h2>
-        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.1">{{questions.option1}}</button> {{questions.percentage1}}%</h4>
-        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.2">{{questions.option2}}</button> {{questions.percentage2}}%</h4>
-        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.3">{{questions.option3}}</button> {{questions.percentage3}}%</h4>
-        <h4><button onclick="vote(this.id)" id="{{questions.questionnumber}}.4">{{questions.option4}}</button> {{questions.percentage4}}%</h4>
+
+    {% for q in questionsData %}
+        <div class="poll-header">
+        <img src="{{ q.author_photo }}"
+            alt="{{ q.author_name }}’s avatar">
+        <h3 style="margin: 0;">{{ q.author_name }}</h3>
+        </div>
+
+        <h2>{{ q.question }}</h2>
+
+        <h4>
+        <button
+            class="vote-btn"
+            data-qn="{{ q.questionnumber }}"
+            data-opt="1"
+            id="btn-{{ q.questionnumber }}-1"
+            onclick="vote(this)">
+            {{ q.option1 }}
+        </button>
+        <span id="pct-{{ q.questionnumber }}-1">
+            {{ q.percentage1|floatformat:1 }}%
+        </span>
+        </h4>
+
+        <h4>
+        <button
+            class="vote-btn"
+            data-qn="{{ q.questionnumber }}"
+            data-opt="2"
+            id="btn-{{ q.questionnumber }}-2"
+            onclick="vote(this)">
+            {{ q.option2 }}
+        </button>
+        <span id="pct-{{ q.questionnumber }}-2">
+            {{ q.percentage2|floatformat:1 }}%
+        </span>
+        </h4>
+
+        <h4>
+        <button
+            class="vote-btn"
+            data-qn="{{ q.questionnumber }}"
+            data-opt="3"
+            id="btn-{{ q.questionnumber }}-3"
+            onclick="vote(this)">
+            {{ q.option3 }}
+        </button>
+        <span id="pct-{{ q.questionnumber }}-3">
+            {{ q.percentage3|floatformat:1 }}%
+        </span>
+        </h4>
+
+        <h4>
+        <button
+            class="vote-btn"
+            data-qn="{{ q.questionnumber }}"
+            data-opt="4"
+            id="btn-{{ q.questionnumber }}-4"
+            onclick="vote(this)">
+            {{ q.option4 }}
+        </button>
+        <span id="pct-{{ q.questionnumber }}-4">
+            {{ q.percentage4|floatformat:1 }}%
+        </span>
+        </h4>
     {% endfor %}
-</body>
+
 <script>
-    const getCookie = (name) => {
+    // CSRF helper
+        const getCookie = name => {
         let cookieValue = null;
         if (document.cookie && document.cookie !== "") {
-            const cookies = document.cookie.split(";");
-            for (let cookie of cookies) {
-                cookie = cookie.trim();
-                if (cookie.startsWith(name + "=")) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
+            document.cookie.split(";").forEach(c => {
+            c = c.trim();
+            if (c.startsWith(name + "=")) {
+                cookieValue = decodeURIComponent(c.slice(name.length + 1));
             }
+            });
         }
         return cookieValue;
-    }
+        };
 
-    const vote = (id)=>{
-        const parts = id.split(".")
-        const questionnumber = parts[0]
-        const optionnumber = parts[1]
-        fetch("/vote/",{
-            method : "POST",
+        // Persist voted question numbers
+        const STORAGE_KEY = "votedQuestions";
+        const votedSet = new Set(
+        JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]")
+        );
+
+        // On load, disable any buttons for already-voted questions
+        document.addEventListener("DOMContentLoaded", () => {
+        votedSet.forEach(qn => {
+            document
+            .querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+            .forEach(btn => btn.disabled = true);
+        });
+        });
+
+        function vote(button) {
+        const qn  = button.dataset.qn;
+        const opt = button.dataset.opt;
+
+        if (votedSet.has(qn)) return;  // already voted
+
+        fetch("/vote/", {
+            method: "POST",
             headers: {
-                "Content-type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken")
             },
             body: JSON.stringify({
-                questionnumber: questionnumber,
-                optionnumber: optionnumber
+            questionnumber: qn,
+            optionnumber:   opt
             })
-        }).then(response => response.json())
-    }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                return alert("Error: " + data.error);
+            }
 
-    const getName = (email)=>{
-        fetch("/get-name/",{
-            method : "POST",
-            headers: {
-                "Content-type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({
-                email: email
-            })
-        }).then(response => response.json())
-    }
+            // Live-update percentages
+            const pct = data.percentages;
+            for (let o = 1; o <= 4; o++) {
+                const span = document.getElementById(`pct-${qn}-${o}`);
+                if (span) span.textContent = `${pct[o]}%`;
+            }
 
+            // Disable all options for this question
+            document
+            .querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+            .forEach(btn => btn.disabled = true);
+
+            // Persist vote
+            votedSet.add(qn);
+            localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(Array.from(votedSet))
+            );
+        })
+        .catch(err => console.error(err));
+        }
 </script>
+</body>
 </html>

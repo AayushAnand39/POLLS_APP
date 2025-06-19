@@ -5,13 +5,19 @@ from datetime import date, time
 
 # Create your models here.
 class User(models.Model):
-    name = models.CharField(max_length=200)
-    username = models.CharField(max_length=200)
-    email = models.EmailField(max_length=200, primary_key=True, unique=True)
-    phonenumber = models.CharField(max_length=11)
-    password = models.CharField(max_length=500)
-    logintime = models.DateTimeField(default=timezone.now)
-    logouttime = models.DateTimeField(default=timezone.now)
+    name         = models.CharField(max_length=200)
+    username     = models.CharField(max_length=200)
+    email        = models.EmailField(max_length=200, primary_key=True, unique=True)
+    phonenumber  = models.CharField(max_length=11)
+    password     = models.CharField(max_length=500)
+    logintime    = models.DateTimeField(default=timezone.now)
+    logouttime   = models.DateTimeField(default=timezone.now)
+    profile_pic  = models.ImageField(
+                     upload_to="profiles/",
+                     null=True,
+                     blank=True,
+                     help_text="Optional profile picture"
+                   )
     
 class Polls(models.Model):
     questionnumber = models.BigAutoField(primary_key=True)

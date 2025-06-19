@@ -1,176 +1,187 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Section</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Section</title>
+  <style>
+    .navbar a { margin-right: 1em; }
+    .chatlist, .recentchats, .chatarea { margin: 1em; }
+    .user-suggest { display: flex; align-items: center; cursor: pointer; padding: .5em; }
+    .user-suggest img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 8px; }
+    .searchedUsers { border: 1px solid #ccc; max-height: 200px; overflow-y: auto; margin-top: .5em; }
+    .chatsarea {
+      height: 400px;
+      overflow-y: scroll;
+      padding: 1em;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      display: flex;
+      flex-direction: column; /* oldest at top, newest at bottom */
+    }
+    .chat { margin: .5em 0; padding: .5em; border-radius: 8px; max-width: 60%; }
+    .chat.sent { background: #d1e7dd; align-self: flex-end; }
+    .chat.received { background: #f8d7da; align-self: flex-start; }
+    .textArea { margin-top: 1em; }
+    .textArea textarea { width: 80%; height: 60px; }
+    .textArea button { vertical-align: top; height: 60px; }
+  </style>
 </head>
 <body>
-    <div class="navbar">
-        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
-        <a href="{% url 'post' email=email %}">POST</a>
-        <a href="{% url 'chat' email=email %}">CHAT</a>
-        <a href="{% url 'official' email=email %}">OFFICIAL</a>
-        <a href="/profile">PROFILE</a>
-        <a href="{% url 'logout' email=email %}">LOGOUT</a>
-    </div>
-    <div class="chatlist">
-        <input type="text" name="name" id="name" placeholder="Search for a user to chat with">
-        <input type="submit" value="Search" onclick="userSearch()">
-        <div class="searchedUsers"></div>
-    </div>
-    <div class="recentchats">
-        <h2>Recently Contacted</h2>
-        {% for chat in recentChatsData %}
-            <button onclick="startChat('{{ chat.other }}')">
-            <div class="chat">
-                <h4>{{ chat.other }}</h4>
-                <p>{{ chat.message }}</p>
-            </div>
-            </button>
-            <br>
-        {% empty %}
-            <p>No recent chats.</p>
-        {% endfor %}
-    </div>
-    <div class="chatarea">
-        <div class="namearea"></div>
-        <div class="chatsarea"></div>
-        <div class="textArea"></div>
-    </div>
-</body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post' email=email %}">POST</a>
+    <a href="{% url 'chat' email=email %}">CHAT</a>
+    <a href="{% url 'official' email=email %}">OFFICIAL</a>
+    <a href="/profile">PROFILE</a>
+    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  </div>
 
-<script>
-    const senderEmail = `{{ email }}`;
-    let currentReceiver = null;
-    const renderedKeys = new Set();
+  <div class="chatlist">
+    <input type="text" id="name" placeholder="Search users…" oninput="liveSearch()">
+    <div class="searchedUsers"></div>
+  </div>
 
-    function getCookie(name) {
+  <div class="recentchats">
+    <h2>Recently Contacted</h2>
+    {% for c in recentChatsData %}
+      <div class="user-suggest" data-email="{{ c.email }}" data-name="{{ c.name }}" data-photo="{{ c.photo_url }}">
+        <img src="{{ c.photo_url }}" alt="{{ c.name }}'s avatar">
+        <div>
+          <strong>{{ c.name }}</strong><br>
+          <small>{{ c.message }}</small>
+        </div>
+      </div>
+    {% empty %}
+      <p>No recent chats.</p>
+    {% endfor %}
+  </div>
+
+  <div class="chatarea">
+    <div class="namearea"></div>
+    <div class="chatsarea"></div>
+    <div class="textArea"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const senderEmail = `{{ email }}`;
+      let currentReceiver = null;
+      const renderedKeys = new Set();
+
+      function getCookie(name) {
         let cookieValue = null;
-        if (document.cookie && document.cookie !== "") {
-            document.cookie.split(";").forEach(c => {
-                c = c.trim();
-                if (c.startsWith(name + "=")) {
-                cookieValue = decodeURIComponent(c.slice(name.length + 1));
-                }
-            });
-        }
+        document.cookie.split(';').forEach(c => {
+          c = c.trim();
+          if (c.startsWith(name + '=')) {
+            cookieValue = decodeURIComponent(c.slice(name.length + 1));
+          }
+        });
         return cookieValue;
-    }
+      }
 
-    function messageKey(m) {
-        return `${m.senderemail}|${m.time}|${m.message}`;
-    }
+      // Poll every 2s
+      setInterval(fetchChats, 2000);
 
-    function fetchChats() {
-        if (!currentReceiver) return;
+      // Live search with debounce
+      let searchTimer;
+      document.getElementById('name').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(userSearch, 300);
+      });
 
-        fetch("/get-chats/", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({
-                senderEmail,
-                receiverEmail: currentReceiver
-            })
+      function userSearch() {
+        const prefix = document.getElementById('name').value;
+        fetch('/chat-search/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ name: prefix })
         })
         .then(res => res.json())
         .then(data => {
-            const area = document.querySelector(".chatsarea");
-            data.messages.forEach(msg => {
-                const key = messageKey(msg);
-                if (renderedKeys.has(key)) return; 
-                renderedKeys.add(key);
+          const list = document.querySelector('.searchedUsers');
+          list.innerHTML = data.results.map(u =>
+            `<div class="user-suggest" data-email="${u.email}" data-name="${u.name}" data-photo="${u.photo_url}">` +
+            `<img src="${u.photo_url}" alt="${u.name} avatar">` +
+            `<span>${u.name}</span></div>`
+          ).join('');
+        });
+      }
 
-                const wrapper = document.createElement("div");
-                wrapper.className = "chat";
-                wrapper.style.backgroundColor =
-                msg.senderemail === senderEmail ? "#d1e7dd" : "#f8d7da";
+      // Delegate clicks on user suggestions
+      document.querySelector('.searchedUsers').addEventListener('click', handleUserClick);
+      document.querySelector('.recentchats').addEventListener('click', handleUserClick);
+      function handleUserClick(e) {
+        const node = e.target.closest('.user-suggest');
+        if (!node) return;
+        startChat(node.dataset.email, node.dataset.name, node.dataset.photo);
+      }
 
-                const who = document.createElement("h4");
-                who.textContent =
-                msg.senderemail === senderEmail ? "You" : msg.senderemail;
-
-                const text = document.createElement("p");
-                text.textContent = msg.message;
-                text.style.textAlign =
-                msg.senderemail === senderEmail ? "right" : "left";
-
-                wrapper.append(who, text);
-                area.append(wrapper);
-            });
-
-            area.scrollTop = area.scrollHeight;
-        })
-        .catch(console.error);
-    }
-
-    setInterval(fetchChats, 2000);
-
-    function userSearch() {
-        const input = document.getElementById("name").value;
-        fetch("/chat-search/", {
-            method : "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({ name: input })
-        })
-        .then(res => res.json())
-        .then(data => {
-        const list = document.querySelector(".searchedUsers");
-        list.innerHTML = data.results.map(u => `
-            <div class="user" id="${u.email}">
-            ${u.name}
-            <button onclick="startChat('${u.email}')">Start Chat</button>
-            </div>
-        `).join("");
-        })
-        .catch(console.error);
-  }
-
-  function startChat(receiverEmail) {
-        currentReceiver = receiverEmail;
+      function startChat(email, name, photo) {
+        currentReceiver = email;
         renderedKeys.clear();
-
-        document.querySelector(".namearea").innerHTML = `<h3>${receiverEmail}</h3>`;
-        document.querySelector(".chatsarea").innerHTML = "";
-        document.querySelector(".textArea").innerHTML = `
-            <textarea id="message" placeholder="Type your message"></textarea>
-            <button id="sendBtn">Send</button>
-        `;
-
-        document.getElementById("sendBtn").onclick = () => sendMessage(receiverEmail);
-
+        document.querySelector('.namearea').innerHTML =
+          `<img src="${photo}" alt="avatar" style="width:40px;height:40px;border-radius:50%;margin-right:8px;vertical-align:middle">` +
+          `<h3 style="display:inline;vertical-align:middle">${name}</h3>`;
+        const area = document.querySelector('.chatsarea');
+        area.innerHTML = '';
+        document.querySelector('.textArea').innerHTML =
+          `<textarea id="message" placeholder="Type your message"></textarea><button id="sendBtn">Send</button>`;
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
         fetchChats();
-    }
+      }
 
-    function sendMessage(receiverEmail) {
-        const input = document.getElementById("message");
-        const message = input.value.trim();
-        if (!message) return;
+      function fetchChats() {
+        if (!currentReceiver) return;
+        const area = document.querySelector('.chatsarea');
+        // preserve scroll position
+        const atBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 50;
 
-        fetch("/send-message/", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({
-                senderEmail,
-                receiverEmail,
-                message
-            })
+        fetch('/get-chats/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ senderEmail, receiverEmail: currentReceiver })
         })
         .then(res => res.json())
+        .then(data => {
+          data.messages.forEach(msg => {
+            const key = `${msg.senderemail}|${msg.time}|${msg.message}`;
+            if (renderedKeys.has(key)) return;
+            renderedKeys.add(key);
+            const div = document.createElement('div');
+            div.className = 'chat ' + (msg.senderemail === senderEmail ? 'sent' : 'received');
+            div.innerHTML = `<p>${msg.message}</p><small>${msg.time}</small>`;
+            area.appendChild(div);
+          });
+          if (atBottom) area.scrollTop = area.scrollHeight;
+        });
+      }
+
+      function sendMessage() {
+        const message = document.getElementById('message').value.trim();
+        if (!currentReceiver || !message) return;
+        fetch('/send-message/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ senderEmail, receiverEmail: currentReceiver, message })
+        })
+        .then(res => { if (!res.ok) throw new Error('Bad Request'); return res.json(); })
         .then(() => {
-            input.value = "";
-            fetchChats();
+          document.getElementById('message').value = '';
+          fetchChats();
         })
         .catch(console.error);
-    }
-</script>
+      }
+    });
+  </script>
+</body>
 </html>

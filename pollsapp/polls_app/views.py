@@ -9,6 +9,7 @@ from collections import OrderedDict
 import urllib.parse
 from django.db.models import Q
 from datetime import datetime
+from django.conf import settings
 from django.forms.models import model_to_dict
 
 # Create your views here.
@@ -49,52 +50,65 @@ def login(request):
     else:
         return render(request,"Login.html")
     
+
 def dashboard(request, email):
     email = urllib.parse.unquote(email)
     user = models.User.objects.get(email=email)
-    if user.logintime == user.logouttime:
-        questionsList = models.Polls.objects.all()
-        questionsData = []
-        for question in questionsList:
-            response1 = question.response1
-            response2 = question.response2
-            response3 = question.response3
-            response4 = question.response4
-            completeResponse = response1+response2+response3+response4
-            percentage1 = 0
-            percentage2 = 0
-            percentage3 = 0
-            percentage4 = 0
-            if completeResponse == 0:
-                percentage1 = 0
-                percentage2 = 0
-                percentage3 = 0
-                percentage4 = 0
-            else:
-                percentage1 = (response1*100)/(completeResponse)
-                percentage2 = (response2*100)/(completeResponse)
-                percentage3 = (response3*100)/(completeResponse)
-                percentage4 = (response4*100)/(completeResponse)
-            questionsData.append({
-                "questionnumber": question.questionnumber,
-                "question":question.question,
-                "authoremail":question.authoremail,
-                "option1":question.option1,
-                "option2":question.option2,
-                "option3":question.option3,
-                "option4":question.option4,
-                "response1":question.response1,
-                "response2":question.response2,
-                "response3":question.response3,
-                "response4":question.response4,
-                "percentage1":percentage1,
-                "percentage2":percentage2,
-                "percentage3":percentage3,
-                "percentage4":percentage4
-            })
-        return render(request,"dashboard.html",{"name" : user.name, "email": email, "username": user.username, "phonenumber": user.phonenumber, "message":"Login successful", "questionsData":questionsData})
-    else:
+    if user.logintime != user.logouttime:
         return redirect("login")
+
+    questionsList = models.Polls.objects.all()
+    questionsData = []
+
+    for question in questionsList:
+        # look up the author User
+        try:
+            author = models.User.objects.get(email=question.authoremail)
+            author_name  = author.name
+            # if they have uploaded a photo, use it; otherwise use a static fallback
+            if author.profile_pic:
+                author_photo = author.profile_pic.url
+            else:
+                author_photo = settings.STATIC_URL + "img/anonymous.png"
+        except models.User.DoesNotExist:
+            author_name  = "Unknown"
+            author_photo = settings.STATIC_URL + "img/anonymous.png"
+
+        # compute percentages as before
+        total = (
+            question.response1 +
+            question.response2 +
+            question.response3 +
+            question.response4
+        ) or 1
+        pct1 = (question.response1 * 100) / total
+        pct2 = (question.response2 * 100) / total
+        pct3 = (question.response3 * 100) / total
+        pct4 = (question.response4 * 100) / total
+
+        questionsData.append({
+            "questionnumber": question.questionnumber,
+            "author_name":    author_name,
+            "author_photo":   author_photo,
+            "question":       question.question,
+            "option1":        question.option1,
+            "option2":        question.option2,
+            "option3":        question.option3,
+            "option4":        question.option4,
+            "percentage1":    pct1,
+            "percentage2":    pct2,
+            "percentage3":    pct3,
+            "percentage4":    pct4,
+        })
+
+    return render(request, "dashboard.html", {
+        "name":          user.name,
+        "email":         email,
+        "username":      user.username,
+        "phonenumber":   user.phonenumber,
+        "message":       "Login successful",
+        "questionsData": questionsData,
+    })
     
 def post(request, email):
     email = urllib.parse.unquote(email)
@@ -113,68 +127,101 @@ def post(request, email):
             return render(request,"post.html",{"name" : user.name, "email": email, "username": user.username, "phonenumber": user.phonenumber, "message":"Login successful"})
     else:
         return redirect("login")
-    
+
+
 @csrf_exempt
 def vote(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        questionnumber = int(data.get("questionnumber"))
-        optionnumber = int(data.get("optionnumber"))
-        question = models.Polls.objects.get(questionnumber = questionnumber)
-        if optionnumber == 1:
-            question.response1 += 1
-        elif optionnumber == 2:
-            question.response2 += 1
-        elif optionnumber == 3:
-            question.response3 += 1
-        elif optionnumber == 4:
-            question.response4 += 1
-        question.save()
-        return JsonResponse({"message": "Vote recorded!"})
-    else:
+    if request.method != "POST":
         return JsonResponse({"error": "Invalid request"}, status=400)
+
+    data = json.loads(request.body)
+    qn = int(data.get("questionnumber"))
+    opt = int(data.get("optionnumber"))
+    poll = models.Polls.objects.get(questionnumber=qn)
+
+    if   opt == 1: poll.response1 += 1
+    elif opt == 2: poll.response2 += 1
+    elif opt == 3: poll.response3 += 1
+    elif opt == 4: poll.response4 += 1
+    poll.save()
+
+    # recompute percentages
+    total = poll.response1 + poll.response2 + poll.response3 + poll.response4 or 1
+    p1 = round(poll.response1 * 100 / total, 1)
+    p2 = round(poll.response2 * 100 / total, 1)
+    p3 = round(poll.response3 * 100 / total, 1)
+    p4 = round(poll.response4 * 100 / total, 1)
+
+    return JsonResponse({
+        "message": "Vote recorded!",
+        "percentages": {
+            "1": p1,
+            "2": p2,
+            "3": p3,
+            "4": p4
+        }
+    })
 
 def chat(request, email):
     email = urllib.parse.unquote(email)
     user  = models.User.objects.get(email=email)
     if user.logintime != user.logouttime:
         return redirect("login")
+
     completeUserHistory = (
         models.Messages.objects
         .filter(Q(senderemail=email) | Q(receiveremail=email))
         .order_by('-time')
     )
     recent = OrderedDict()
-    for userHistory in completeUserHistory:
-        other = userHistory.receiveremail if userHistory.senderemail == email else userHistory.senderemail
-        if other not in recent:
-            recent[other] = userHistory
+    for msg in completeUserHistory:
+        other_email = msg.receiveremail if msg.senderemail == email else msg.senderemail
+        if other_email not in recent:
+            recent[other_email] = msg
+
     recentChatsData = []
-    for other, userHistory in recent.items():
+    for other_email, msg in recent.items():
+        # look up the other user
+        try:
+            other = models.User.objects.get(email=other_email)
+            name = other.name
+            photo = other.profile_pic.url if other.profile_pic else settings.STATIC_URL + "img/anonymous.png"
+        except models.User.DoesNotExist:
+            name, photo = "Unknown", settings.STATIC_URL + "img/anonymous.png"
+
         recentChatsData.append({
-            "other":   other,
-            "message": userHistory.message,
-            "time":    userHistory.time.strftime("%Y-%m-%d %H:%M:%S"),
-            "read":    userHistory.read,
+            "email":     other_email,
+            "name":      name,
+            "photo_url": photo,
+            "message":   msg.message,
+            "time":      msg.time.strftime("%Y-%m-%d %H:%M:%S"),
+            "read":      msg.read,
         })
 
     return render(request, "chat.html", {
-        "name":            user.name,
         "email":           email,
-        "username":        user.username,
-        "phonenumber":     user.phonenumber,
-        "message":         "Login successful",
         "recentChatsData": recentChatsData,
     })
 
 @csrf_exempt
 def chat_search(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        search_name = data.get("name", "")
-        users = models.User.objects.filter(name__icontains=search_name)[:10]
-        results = [{"email": user.email, "name": user.name} for user in users]
-        return JsonResponse({'results': results})
+    if request.method != "POST":
+        return JsonResponse({"error":"Invalid request"}, status=400)
+
+    data = json.loads(request.body)
+    prefix = data.get("name","").strip()
+    # prefix‐match on name
+    users = models.User.objects.filter(name__istartswith=prefix)[:10]
+
+    results = []
+    for u in users:
+        results.append({
+            "email":     u.email,
+            "name":      u.name,
+            "photo_url": u.profile_pic.url if u.profile_pic else settings.STATIC_URL + "img/anonymous.png"
+        })
+    return JsonResponse({"results": results})
+
     
 @csrf_exempt
 def send_message(request):
