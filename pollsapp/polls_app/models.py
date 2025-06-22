@@ -64,3 +64,22 @@ class ExamQuestions(models.Model):
     positiveScore = models.IntegerField(default=0)
     negativeScore = models.IntegerField(default=0)
     correctOption = models.IntegerField(default=0)
+    explanation = models.CharField(max_length=5000, null=True, blank=True)
+
+class ExamResults(models.Model):
+    resultid = models.BigAutoField(primary_key=True)
+    examid = models.IntegerField(default=0)
+    email = models.EmailField(max_length=200)
+    score = models.IntegerField(default=0)
+    timeTaken = models.IntegerField(default=0)
+    date = models.DateTimeField(default=timezone.now)
+    correctAnswers = models.IntegerField(default=0)
+    wrongAnswers = models.IntegerField(default=0)
+
+class ExamResponse(models.Model):
+    responseid = models.BigAutoField(primary_key=True)
+    examid = models.IntegerField(default=0)
+    email = models.EmailField(max_length=200)
+    questionid = models.IntegerField(default=0)
+    response = models.IntegerField(default=0)
+    date = models.DateTimeField(default=timezone.now)

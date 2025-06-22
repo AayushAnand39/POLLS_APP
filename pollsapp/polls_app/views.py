@@ -362,6 +362,97 @@ def loadExam(request):
     else:
         return JsonResponse({"error": "error"}, status=400) 
     
+
+@csrf_exempt
+def get_exam_meta(request):
+    """
+    Returns: {
+      examid, name, startDate, startTime, endTime, numberOfQuestions
+    }
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request"}, status=400)
+    data      = json.loads(request.body)
+    examid    = data.get("examid")
+    try:
+        details = models.ExamDetails.objects.get(examid=examid)
+    except models.ExamDetails.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    # Serialize only what you need
+    return JsonResponse({
+        "examid":           details.examid,
+        "name":             details.name,
+        "startDate":        details.startDate.isoformat(),
+        "startTime":        details.startTime.strftime("%H:%M:%S"),
+        "endTime":          details.endTime.strftime("%H:%M:%S"),
+        "numberOfQuestions": details.numberOfQuestions,
+    })
+
+
+@csrf_exempt
+def submit_exam(request):
+    """
+    Expects JSON:
+    {
+      examid: 123,
+      email: "stu@example.com",
+      responses: [
+         { questionnumber: 1, selectedOption: 2, timestamp: "2025-06-22T14:05:30" },
+         ...
+      ],
+      timeTakenSeconds: 3600
+    }
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid"}, status=400)
+
+    payload = json.loads(request.body)
+    examid  = payload["examid"]
+    email   = payload["email"]
+    resp_list = payload["responses"]
+    time_taken = payload["timeTakenSeconds"]
+
+    # Compute score & counts
+    correct = wrong = total_score = 0
+
+    for r in resp_list:
+        qn = r["questionnumber"]
+        sel = r["selectedOption"]
+        # Save each response
+        models.ExamResponse.objects.create(
+            examid=examid,
+            email=email,
+            questionid=qn,
+            response=sel
+        )
+        # Score it
+        eq = models.ExamQuestions.objects.get(examid=examid, questionnumber=qn)
+        if sel == eq.correctOption:
+            correct += 1
+            total_score += eq.positiveScore
+        else:
+            wrong += 1
+            total_score += eq.negativeScore
+
+    # Save the aggregate result
+    models.ExamResults.objects.create(
+        examid=examid,
+        email=email,
+        score=total_score,
+        timeTaken=time_taken,
+        correctAnswers=correct,
+        wrongAnswers=wrong
+    )
+
+    return JsonResponse({
+        "status": "ok",
+        "score": total_score,
+        "correct": correct,
+        "wrong": wrong
+    })
+
+    
 def logout(request, email):
     email = urllib.parse.unquote(email)
     user = models.User.objects.get(email = email)
