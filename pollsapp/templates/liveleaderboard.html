@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Leaderboard</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+    th, td { border: 1px solid #ccc; padding: 0.5em; text-align: center; }
+    th { background: #f5f5f5; }
+    #timer { font-size: 1.1em; margin-bottom: 0.5em; color: #b71c1c; }
+    .pagination { margin-top: 0.5em; }
+    .pagination button { margin-right: 0.5em; }
+    #setupError { color: #b71c1c; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post'      email=email %}">POST</a>
+    <a href="{% url 'chat'      email=email %}">CHAT</a>
+    <a href="{% url 'official'  email=email %}">OFFICIAL</a>
+    <a href="/profile">PROFILE</a>
+    <a href="{% url 'logout'    email=email %}">LOGOUT</a>
+  </div>
+
+  <div class="officialsection">
+    <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
+    <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+    <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
+  </div>
+
+  <h2>Live Leaderboard</h2>
+  <div id="setup">
+    <form id="leaderboardForm">
+      {% csrf_token %}
+      <input
+        type="number"
+        id="examid"
+        placeholder="Enter Exam ID"
+        required
+        min="1"
+      />
+      <button type="submit">Load Leaderboard</button>
+    </form>
+    <p id="setupError"></p>
+  </div>
+
+  <div id="leaderboard" style="display:none">
+    <div id="timer">Remaining: --:--</div>
+    <table>
+      <thead>
+        <tr id="headerRow"></tr>
+      </thead>
+      <tbody id="bodyRows"></tbody>
+    </table>
+    <div class="pagination">
+      <button id="prevBtn">« Prev</button>
+      <span id="pageInfo"></span>
+      <button id="nextBtn">Next »</button>
+    </div>
+  </div>
+
+  <script>
+    // CSRF helper to read Django's CSRF cookie
+    function getCookie(name) {
+      let v = null;
+      document.cookie.split(";").forEach(c => {
+        c = c.trim();
+        if (c.startsWith(name + "=")) {
+          v = decodeURIComponent(c.slice(name.length+1));
+        }
+      });
+      return v;
+    }
+    const csrftoken = getCookie("csrftoken");
+    const emailEl   = "{{ email }}";
+
+    let examid, page = 1, qnums = [];
+
+    // When the form is submitted, fetch the leaderboard data
+    document.getElementById("leaderboardForm").onsubmit = async e => {
+      e.preventDefault();
+
+      const input = document.getElementById("examid").value.trim();
+      if (!input || isNaN(input) || +input < 1) {
+        document.getElementById("setupError").textContent =
+          "Please enter a valid Exam ID.";
+        return;
+      }
+
+      examid = +input;
+      page   = 1;
+      document.getElementById("setupError").textContent = "";
+
+      const ok = await loadAndRender();
+      if (ok) {
+        document.getElementById("setup").style.display      = "none";
+        document.getElementById("leaderboard").style.display = "";
+        setInterval(loadAndRender, 5000);
+      }
+    };
+
+    document.getElementById("prevBtn").onclick = () => {
+      if (page > 1) {
+        page--;
+        loadAndRender();
+      }
+    };
+    document.getElementById("nextBtn").onclick = () => {
+      page++;
+      loadAndRender();
+    };
+
+    async function loadAndRender() {
+      const url = `{% url 'liveleaderboard-data' email=email %}`
+                + `?examid=${examid}&page=${page}`;
+
+      const resp = await fetch(url, {
+        headers: { "X-CSRFToken": csrftoken }
+      });
+
+      // handle known HTTP errors before parsing JSON
+      if (resp.status === 400) {
+        document.getElementById("setupError").textContent =
+          "Invalid Exam ID.";
+        return false;
+      }
+      if (resp.status === 404) {
+        document.getElementById("setupError").textContent =
+          "Exam not found.";
+        return false;
+      }
+      if (resp.status === 403) {
+        document.getElementById("setupError").textContent =
+          "You do not have permission.";
+        return false;
+      }
+      if (!resp.ok) {
+        console.error(await resp.text());
+        document.getElementById("setupError").textContent =
+          "Unexpected error loading leaderboard.";
+        return false;
+      }
+
+      // now safe to parse JSON
+      const js = await resp.json();
+      qnums = js.qnums;
+      renderHeader();
+      renderBody(js.rows);
+      renderPagination(js.page, js.num_pages);
+      return true;
+    }
+
+    function renderHeader() {
+      const hdr = document.getElementById("headerRow");
+      hdr.innerHTML = `<th>Examinee</th>`
+        + qnums.map(n => `<th>Q${n}</th>`).join("")
+        + `<th>Time(s)</th><th>Total</th>`;
+    }
+
+    function renderBody(rows) {
+      const b = document.getElementById("bodyRows");
+      b.innerHTML = rows.map(r =>
+        `<tr>
+           <td>${r.name}</td>
+           ${r.per_q.map(p => `<td>${p}</td>`).join("")}
+           <td>${r.timeTaken}</td>
+           <td>${r.totalScore}</td>
+         </tr>`
+      ).join("");
+    }
+
+    function renderPagination(cur, total) {
+      document.getElementById("pageInfo").textContent =
+        `Page ${cur} of ${total}`;
+      document.getElementById("prevBtn").disabled = cur <= 1;
+      document.getElementById("nextBtn").disabled = cur >= total;
+    }
+  </script>
+</body>
+</html>

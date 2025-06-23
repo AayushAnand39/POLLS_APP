@@ -21,4 +21,17 @@ urlpatterns = [
     path("load-exam/",views.loadExam,name="loadExam"),
     path("submit-exam/",views.submit_exam,name="submitExam"),
     path("get-exam-meta/",views.get_exam_meta,name="get-exam-meta"),
+    # path("liveleaderboard/<str:email>",views.liveleaderboard,name="liveleaderboard"),
+    path(
+        'liveleaderboard/<str:email>/',
+        views.liveleaderboard_page,
+        name='liveleaderboard'
+    ),
+
+    # Serves JSON data for AJAX
+    path(
+        'liveleaderboard-data/<str:email>/',
+        views.liveleaderboard_data,
+        name='liveleaderboard-data'
+    ),
 ]

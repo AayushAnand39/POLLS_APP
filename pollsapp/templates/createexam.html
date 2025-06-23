@@ -16,8 +16,8 @@
     </div>
     <div class="officialsection">
         <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
-        <a href="/conductvote">CONDUCT A VOTE</a>
         <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+        <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
     </div>
     <div class="questions">
         <form action="{% url 'createexam' email=email %}" method="post" onsubmit="return createExamQuestions(event)">

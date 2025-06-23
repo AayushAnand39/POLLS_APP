@@ -3,7 +3,7 @@ from . import models
 from django.utils import timezone
 import urllib.parse
 from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 import json
 from collections import OrderedDict
 import urllib.parse
@@ -11,6 +11,7 @@ from django.db.models import Q
 from datetime import datetime
 from django.conf import settings
 from django.forms.models import model_to_dict
+from django.core.paginator import Paginator
 
 # Create your views here.
 def index(request):
@@ -261,6 +262,7 @@ def get_chats(request):
     return JsonResponse({"error": "Invalid request"}, status=400)
 
 def official(request, email):
+    email = urllib.parse.unquote(email)
     user = models.User.objects.get(email=email)
     if user.logintime == user.logouttime:
         return render(request,"official.html",{"email": email, "message" : "Welcome to the official section of the polls app"})
@@ -268,6 +270,7 @@ def official(request, email):
         return render(request,"Login.html")
     
 def createexam(request, email):
+    email = urllib.parse.unquote(email)
     user = models.User.objects.get(email = email)
     if user.logintime == user.logouttime:
         return render(request,"createexam.html",{"email":email})
@@ -333,6 +336,7 @@ def sendExamQuestion(request):
 
     
 def attendexam(request, email):
+    email = urllib.parse.unquote(email)
     user = models.User.objects.get(email = email)
     if user.logintime == user.logouttime:
         return render(request,"attendexam.html",{"email":email})
@@ -365,45 +369,36 @@ def loadExam(request):
 
 @csrf_exempt
 def get_exam_meta(request):
-    """
-    Returns: {
-      examid, name, startDate, startTime, endTime, numberOfQuestions
-    }
-    """
     if request.method != "POST":
-        return JsonResponse({"error": "Invalid request"}, status=400)
-    data      = json.loads(request.body)
-    examid    = data.get("examid")
+        return JsonResponse({"error":"Invalid request"}, status=400)
+
+    payload = json.loads(request.body)
+    examid  = payload.get("examid")
+    email   = payload.get("email")  # we’ll send this from the client
+
+    # 1) Does the exam exist?
     try:
         details = models.ExamDetails.objects.get(examid=examid)
     except models.ExamDetails.DoesNotExist:
-        return JsonResponse({"error": "Not found"}, status=404)
+        return JsonResponse({"error":"Not found"}, status=404)
 
-    # Serialize only what you need
+    # 2) Has this user already taken it?
+    if models.ExamResults.objects.filter(examid=examid, email=email).exists():
+        return JsonResponse({"error":"Already attempted"}, status=403)
+
+    # 3) Otherwise return the metadata
     return JsonResponse({
         "examid":           details.examid,
         "name":             details.name,
         "startDate":        details.startDate.isoformat(),
         "startTime":        details.startTime.strftime("%H:%M:%S"),
         "endTime":          details.endTime.strftime("%H:%M:%S"),
-        "numberOfQuestions": details.numberOfQuestions,
+        "numberOfQuestions":details.numberOfQuestions
     })
 
 
 @csrf_exempt
 def submit_exam(request):
-    """
-    Expects JSON:
-    {
-      examid: 123,
-      email: "stu@example.com",
-      responses: [
-         { questionnumber: 1, selectedOption: 2, timestamp: "2025-06-22T14:05:30" },
-         ...
-      ],
-      timeTakenSeconds: 3600
-    }
-    """
     if request.method != "POST":
         return JsonResponse({"error": "Invalid"}, status=400)
 
@@ -450,6 +445,116 @@ def submit_exam(request):
         "score": total_score,
         "correct": correct,
         "wrong": wrong
+    })
+
+# def liveleaderboard(request, email):
+#     email = urllib.parse.unquote(email)
+#     user = models.User.objects.get(email=email)
+#     if user.logintime == user.logouttime:
+#         return render(request, "liveleaderboard.html", {"email": email})
+#     else:
+#         return render(request, "Login.html")
+
+
+
+def liveleaderboard_page(request, email):
+    """
+    Renders the HTML page where the teacher can enter an Exam ID
+    and then see the live leaderboard.
+    """
+    # decode the email if it was URL-encoded
+    email = urllib.parse.unquote(email)
+
+    # only allow if user is logged in (login == logout indicates “logged in” in your model)
+    user = models.User.objects.get(email=email)
+    if user.logintime == user.logouttime:
+        return render(request, "liveleaderboard.html", {"email": email})
+    else:
+        return render(request, "Login.html")
+
+
+@csrf_exempt
+def liveleaderboard_data(request, email):
+    """
+    Returns JSON for AJAX calls:
+      ?examid=<int>&page=<int>
+    """
+    # decode email
+    email = urllib.parse.unquote(email)
+
+    # 1) Validate & cast examid
+    try:
+        examid = int(request.GET.get("examid"))
+        if examid < 1:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid Exam ID"}, status=400)
+
+    # 2) Fetch the exam details
+    try:
+        exam = models.ExamDetails.objects.get(examid=examid)
+    except models.ExamDetails.DoesNotExist:
+        return JsonResponse({"error": f"Exam {examid} not found"}, status=404)
+
+    # 3) Permission check: only the creator may view their own exam’s leaderboard
+    if exam.email != email:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
+    # 4) Build the question‐number list for the header
+    qnums = list(
+        models.ExamQuestions.objects
+        .filter(examid=examid)
+        .order_by("questionnumber")
+        .values_list("questionnumber", flat=True)
+    )
+
+    # 5) Get all results, sorted by score desc, then time asc
+    all_results = models.ExamResults.objects \
+        .filter(examid=examid) \
+        .order_by("-score", "timeTaken")
+
+    # 6) Paginate (10 per page)
+    page_num  = int(request.GET.get("page", 1))
+    paginator = Paginator(all_results, 10)
+    page_obj  = paginator.get_page(page_num)
+
+    # 7) Build each row
+    rows = []
+    for res in page_obj:
+        u = models.User.objects.filter(email=res.email).first()
+        name = u.name if u else res.email
+
+        per_q = []
+        for qn in qnums:
+            eq   = models.ExamQuestions.objects.filter(
+                      examid=examid, questionnumber=qn
+                   ).first()
+            resp = models.ExamResponse.objects.filter(
+                      examid=examid, email=res.email, questionid=qn
+                   ).first()
+
+            if not eq:
+                per_q.append(0)
+            elif resp and resp.response == eq.correctOption:
+                per_q.append(eq.positiveScore)
+            elif resp:
+                per_q.append(eq.negativeScore)
+            else:
+                per_q.append(0)
+
+        rows.append({
+            "name":       name,
+            "per_q":      per_q,
+            "timeTaken":  res.timeTaken,
+            "totalScore": res.score,
+        })
+
+    # 8) Return JSON payload
+    return JsonResponse({
+        "qnums":     qnums,
+        "rows":      rows,
+        "page":      page_obj.number,
+        "num_pages": paginator.num_pages,
     })
 
     

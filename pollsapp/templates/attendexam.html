@@ -30,8 +30,8 @@
 
   <div class="officialsection">
     <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
-    <a href="/conductvote">CONDUCT A VOTE</a>
     <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+    <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
   </div>
 
   <div class="exampanel">
@@ -92,20 +92,30 @@
 
     // handle verifying exam ID
     document.getElementById("verifyExam").addEventListener("submit", async e => {
-      e.preventDefault();
-      const examid = +document.getElementById("examid").value;
-      const metaResp = await fetch("/get-exam-meta/", {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "X-CSRFToken":csrftoken
+    e.preventDefault();
+    const examid = +document.getElementById("examid").value;
+
+    const metaResp = await fetch("/get-exam-meta/", {
+        method: "POST",
+        headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrftoken
         },
-        body: JSON.stringify({ examid })
-      });
-      if (!metaResp.ok) {
+        body: JSON.stringify({
+        examid,
+        email: "{{ email }}"       // pass the template-injected user email
+        })
+    });
+
+    if (metaResp.status === 403) {
+        // already attempted
+        return showMessage("You have already attempted this exam.");
+    }
+    if (!metaResp.ok) {
         return showMessage("Exam not found or already ended.");
-      }
-      const meta = await metaResp.json();
+    }
+
+    const meta = await metaResp.json();
       const now       = new Date();
       const startDate = new Date(`${meta.startDate}T${meta.startTime}`);
       const endDate   = new Date(`${meta.startDate}T${meta.endTime}`);
