@@ -1,177 +1,135 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
-    <style>
-        .poll-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 0.5em;
-        }
-        .poll-header img {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin-right: 8px;
-        }
-        .vote-btn {
-            margin-right: 8px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <style>
+    .navbar a { margin-right: 1em; }
+    .poll { border: 1px solid #ccc; padding: 1em; margin-bottom: 2em; }
+    .poll-header { display: flex; align-items: center; margin-bottom: 0.5em; }
+    .poll-header img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 10px; }
+    .poll-options h4 { display: flex; align-items: center; margin-bottom: 0.6em; }
+    .poll-options img { max-height: 35px; margin-left: 10px; }
+    .vote-btn { margin-right: 10px; }
+    .question-image { margin-top: 0.6em; max-width: 100%; max-height: 200px; }
+  </style>
 </head>
 <body>
-    <div class="navbar">
-        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
-        <a href="{% url 'post' email=email %}">POST</a>
-        <a href="{% url 'chat' email=email %}">CHAT</a>
-        <a href="{% url 'official' email=email %}">OFFICIAL</a>
-        <a href="/profile">PROFILE</a>
-        <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post' email=email %}">POST</a>
+    <a href="{% url 'chat' email=email %}">CHAT</a>
+    <a href="{% url 'official' email=email %}">OFFICIAL</a>
+    <a href="/profile">PROFILE</a>
+    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  </div>
+
+  <h1>Welcome, {{ name }}</h1>
+
+  {% for poll in polls %}
+    <div class="poll">
+      <div class="poll-header">
+        <img src="{{ poll.author_photo }}" alt="{{ poll.author_name }}’s avatar" />
+        <h3 style="margin: 0;">{{ poll.author_name }}</h3>
+      </div>
+
+      <h2>{{ poll.question }}</h2>
+
+      {% if poll.question_image %}
+        <img class="question-image" src="{{ poll.question_image }}" alt="Poll image" />
+      {% endif %}
+
+      <div class="poll-options">
+        {% for opt in poll.options %}
+          <h4>
+            <button
+              type="button"
+              class="vote-btn"
+              data-qn="{{ poll.questionid }}"
+              data-opt="{{ opt.optionid }}"
+              id="btn-{{ poll.questionid }}-{{ opt.optionid }}"
+              onclick="vote(this)">
+              {{ opt.optionDescription }}
+            </button>
+            <span id="pct-{{ poll.questionid }}-{{ opt.optionid }}">
+              {{ opt.percentage|default:0.0|floatformat:1 }}%
+            </span>
+
+            {% if opt.image %}
+              <img src="{{ opt.image }}" alt="Option image">
+            {% endif %}
+          </h4>
+        {% endfor %}
+      </div>
     </div>
+  {% endfor %}
 
-    {% for q in questionsData %}
-        <div class="poll-header">
-        <img src="{{ q.author_photo }}"
-            alt="{{ q.author_name }}’s avatar">
-        <h3 style="margin: 0;">{{ q.author_name }}</h3>
-        </div>
+  <script>
+    // point at your email‐free vote endpoint
+    const VOTE_URL = "{% url 'vote' %}";
 
-        <h2>{{ q.question }}</h2>
-
-        <h4>
-        <button
-            class="vote-btn"
-            data-qn="{{ q.questionnumber }}"
-            data-opt="1"
-            id="btn-{{ q.questionnumber }}-1"
-            onclick="vote(this)">
-            {{ q.option1 }}
-        </button>
-        <span id="pct-{{ q.questionnumber }}-1">
-            {{ q.percentage1|floatformat:1 }}%
-        </span>
-        </h4>
-
-        <h4>
-        <button
-            class="vote-btn"
-            data-qn="{{ q.questionnumber }}"
-            data-opt="2"
-            id="btn-{{ q.questionnumber }}-2"
-            onclick="vote(this)">
-            {{ q.option2 }}
-        </button>
-        <span id="pct-{{ q.questionnumber }}-2">
-            {{ q.percentage2|floatformat:1 }}%
-        </span>
-        </h4>
-
-        <h4>
-        <button
-            class="vote-btn"
-            data-qn="{{ q.questionnumber }}"
-            data-opt="3"
-            id="btn-{{ q.questionnumber }}-3"
-            onclick="vote(this)">
-            {{ q.option3 }}
-        </button>
-        <span id="pct-{{ q.questionnumber }}-3">
-            {{ q.percentage3|floatformat:1 }}%
-        </span>
-        </h4>
-
-        <h4>
-        <button
-            class="vote-btn"
-            data-qn="{{ q.questionnumber }}"
-            data-opt="4"
-            id="btn-{{ q.questionnumber }}-4"
-            onclick="vote(this)">
-            {{ q.option4 }}
-        </button>
-        <span id="pct-{{ q.questionnumber }}-4">
-            {{ q.percentage4|floatformat:1 }}%
-        </span>
-        </h4>
-    {% endfor %}
-
-<script>
-    // CSRF helper
-        const getCookie = name => {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== "") {
-            document.cookie.split(";").forEach(c => {
-            c = c.trim();
-            if (c.startsWith(name + "=")) {
-                cookieValue = decodeURIComponent(c.slice(name.length + 1));
-            }
-            });
-        }
-        return cookieValue;
-        };
-
-        // Persist voted question numbers
-        const STORAGE_KEY = "votedQuestions";
-        const votedSet = new Set(
-        JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]")
-        );
-
-        // On load, disable any buttons for already-voted questions
-        document.addEventListener("DOMContentLoaded", () => {
-        votedSet.forEach(qn => {
-            document
-            .querySelectorAll(`.vote-btn[data-qn='${qn}']`)
-            .forEach(btn => btn.disabled = true);
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== "") {
+        document.cookie.split(";").forEach(c => {
+          c = c.trim();
+          if (c.startsWith(name + "=")) {
+            cookieValue = decodeURIComponent(c.slice(name.length + 1));
+          }
         });
+      }
+      return cookieValue;
+    }
+
+    // now using sessionStorage instead of localStorage
+    const STORAGE_KEY = "votedQuestions";
+    const votedSet = new Set(JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]"));
+
+    // disable any already‐voted buttons on load
+    document.addEventListener("DOMContentLoaded", () => {
+      votedSet.forEach(qn => {
+        document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+                .forEach(btn => btn.disabled = true);
+      });
+    });
+
+    function vote(button) {
+      const qn  = button.dataset.qn;
+      const opt = button.dataset.opt;
+
+      if (votedSet.has(qn)) return;
+
+      fetch(VOTE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "X-CSRFToken":    getCookie("csrftoken")
+        },
+        body: JSON.stringify({ questionid: qn, optionid: opt })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          return alert("Error: " + data.error);
+        }
+
+        // live-update percentages
+        Object.entries(data.percentages).forEach(([oid, pct]) => {
+          const span = document.getElementById(`pct-${qn}-${oid}`);
+          if (span) span.textContent = `${pct}%`;
         });
 
-        function vote(button) {
-        const qn  = button.dataset.qn;
-        const opt = button.dataset.opt;
+        // disable this poll's buttons
+        document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+                .forEach(btn => btn.disabled = true);
 
-        if (votedSet.has(qn)) return;  // already voted
-
-        fetch("/vote/", {
-            method: "POST",
-            headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify({
-            questionnumber: qn,
-            optionnumber:   opt
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.error) {
-                return alert("Error: " + data.error);
-            }
-
-            // Live-update percentages
-            const pct = data.percentages;
-            for (let o = 1; o <= 4; o++) {
-                const span = document.getElementById(`pct-${qn}-${o}`);
-                if (span) span.textContent = `${pct[o]}%`;
-            }
-
-            // Disable all options for this question
-            document
-            .querySelectorAll(`.vote-btn[data-qn='${qn}']`)
-            .forEach(btn => btn.disabled = true);
-
-            // Persist vote
-            votedSet.add(qn);
-            localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(Array.from(votedSet))
-            );
-        })
-        .catch(err => console.error(err));
-        }
-</script>
+        // persist in sessionStorage only
+        votedSet.add(qn);
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...votedSet]));
+      })
+      .catch(console.error);
+    }
+  </script>
 </body>
 </html>

@@ -18,19 +18,32 @@ class User(models.Model):
                      blank=True,
                      help_text="Optional profile picture"
                    )
-    
-class Polls(models.Model):
-    questionnumber = models.BigAutoField(primary_key=True)
+
+class PollQuestions(models.Model):
+    questionid = models.BigAutoField(primary_key=True)
     authoremail = models.EmailField(max_length=200, default="example@email.com")
-    question = models.CharField(max_length=5000)
-    option1 = models.CharField(max_length=200)
-    response1 = models.IntegerField(default=0)
-    option2 = models.CharField(max_length=200)
-    response2 = models.IntegerField(default=0)
-    option3 = models.CharField(max_length=200)
-    response3 = models.IntegerField(default=0)
-    option4 = models.CharField(max_length=200)
-    response4 = models.IntegerField(default=0)
+    pollDescription = models.CharField(max_length=5000)
+    likes = models.IntegerField(default=0)
+    dislikes = models.IntegerField(default=0)
+    date = models.DateTimeField(default=timezone.now)
+    image = models.ImageField(
+                upload_to="profiles/",
+                null=True,
+                blank=True,
+                help_text="Optional picture for the poll question"
+            )
+
+class PollResponses(models.Model):
+    optionid = models.BigAutoField(primary_key=True)
+    questionid = models.IntegerField(default=0)
+    optionDescription = models.CharField(max_length=5000)
+    response = models.IntegerField(default=0)
+    image = models.ImageField(
+                upload_to="profiles/",
+                null=True,
+                blank=True,
+                help_text="Optional picture for the poll response"
+            )
 
 class Messages(models.Model):
     messageid = models.BigAutoField(primary_key=True)

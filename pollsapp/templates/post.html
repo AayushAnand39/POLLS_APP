@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% comment %} <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -23,5 +23,187 @@
         <input type="text" name="option4" id="option4" placeholder="Enter option 4"><br>
         <input type="submit" value="Post">
     </form>
+</body>
+</html> {% endcomment %}
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create a New Poll</title>
+  <style>
+    .navbar a { margin-right: 1em; text-decoration: none; color: #007bff; }
+    .option-row { margin-bottom: .8em; display: flex; align-items: center; }
+    .option-row input[type="text"] { width: 200px; margin-right: .5em; }
+    .option-row button { margin-left: .3em; }
+    #status-msg { margin-top: 1em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post' email=email %}">POST</a>
+    <a href="{% url 'chat' email=email %}">CHAT</a>
+    <a href="{% url 'official' email=email %}">OFFICIAL</a>
+    <a href="/profile">PROFILE</a>
+    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  </div>
+
+  <h1>Create a New Poll</h1>
+
+  <form id="poll-form" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <!-- Question text -->
+    <p>
+      <textarea
+        name="question"
+        id="question"
+        rows="3"
+        style="width:100%;"
+        placeholder="Enter your question"
+        required></textarea>
+    </p>
+
+    <!-- Optional question image -->
+    <p>
+      <label>Optional question image:</label>
+      <input type="file" name="question_image" id="question_image">
+    </p>
+
+    <hr>
+
+    <!-- Options: hidden count + container + add button -->
+    <input type="hidden" id="option_count" name="option_count" value="0">
+    <div id="options-container"></div>
+    <button type="button" id="add-option">+ Add Option</button>
+
+    <p>
+      <button type="submit">Post Poll</button>
+    </p>
+  </form>
+
+  <div id="status-msg"></div>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function(){
+    const form             = document.getElementById('poll-form');
+    const optionsContainer = document.getElementById('options-container');
+    const addOptionBtn     = document.getElementById('add-option');
+    const optionCountEl    = document.getElementById('option_count');
+    const statusMsg        = document.getElementById('status-msg');
+    let count = 0;
+
+    // Create one option row with Save/Edit
+    function addOption() {
+      const idx = count++;
+      optionCountEl.value = count;
+
+      const row = document.createElement('div');
+      row.className = 'option-row';
+
+      // Text input
+      const text = document.createElement('input');
+      text.type = 'text';
+      text.name = `option_desc_${idx}`;
+      text.placeholder = 'Option text';
+      text.required = true;
+      row.appendChild(text);
+
+      // File input
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.name = `option_img_${idx}`;
+      row.appendChild(file);
+
+      // Save button
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.textContent = 'Save';
+      row.appendChild(saveBtn);
+
+      // Edit button (hidden initially)
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.textContent = 'Edit';
+      editBtn.style.display = 'none';
+      row.appendChild(editBtn);
+
+      // Save/Edit behavior
+      saveBtn.addEventListener('click', () => {
+        text.disabled = true;
+        file.disabled = true;
+        saveBtn.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+      });
+      editBtn.addEventListener('click', () => {
+        text.disabled = false;
+        file.disabled = false;
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+      });
+
+      optionsContainer.appendChild(row);
+    }
+
+    // Always start with one option
+    addOption();
+
+    // Add more on button click
+    addOptionBtn.addEventListener('click', addOption);
+
+    // CSRF helper
+    function getCookie(name) {
+      let value = null;
+      document.cookie.split(';').forEach(cookie => {
+        const [k, v] = cookie.trim().split('=');
+        if (k === name) value = decodeURIComponent(v);
+      });
+      return value;
+    }
+
+    // Intercept submit, re-enable all inputs, then AJAX POST
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      statusMsg.style.color = 'black';
+      statusMsg.textContent = 'Posting poll…';
+
+      // 🔑 Re-enable any disabled inputs so they get included
+      document.querySelectorAll('.option-row input')
+              .forEach(inp => inp.disabled = false);
+
+      const fd = new FormData(form);
+      const apiUrl = "{% url 'post_poll' email=email %}";
+
+      fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: fd
+      })
+      .then(res => res.json().then(body => ({ status: res.status, body })))
+      .then(({ status, body }) => {
+        if (status >= 400) {
+          statusMsg.style.color = 'red';
+          statusMsg.textContent = body.error || 'Error posting poll';
+        } else {
+          statusMsg.style.color = 'green';
+          statusMsg.textContent = body.message;
+          // Reset form & options
+          form.reset();
+          optionsContainer.innerHTML = '';
+          count = 0;
+          optionCountEl.value = 0;
+          addOption();
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        statusMsg.style.color = 'red';
+        statusMsg.textContent = 'Network error';
+      });
+    });
+  });
+  </script>
 </body>
 </html>

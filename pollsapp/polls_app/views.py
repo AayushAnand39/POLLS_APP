@@ -1,9 +1,9 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from . import models
 from django.utils import timezone
 import urllib.parse
 from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse
 import json
 from collections import OrderedDict
 import urllib.parse
@@ -53,115 +53,198 @@ def login(request):
     
 
 def dashboard(request, email):
+    # decode & fetch user
     email = urllib.parse.unquote(email)
-    user = models.User.objects.get(email=email)
+    user  = get_object_or_404(models.User, email=email)
+
+    # ensure user is logged in
+    # (we redirect to login if they have never successfully logged out)
     if user.logintime != user.logouttime:
         return redirect("login")
 
-    questionsList = models.Polls.objects.all()
-    questionsData = []
-
-    for question in questionsList:
-        # look up the author User
+    # build list of polls
+    polls = []
+    for q in models.PollQuestions.objects.all().order_by("-date"):
+        # author info
         try:
-            author = models.User.objects.get(email=question.authoremail)
+            author = models.User.objects.get(email=q.authoremail)
             author_name  = author.name
-            # if they have uploaded a photo, use it; otherwise use a static fallback
-            if author.profile_pic:
-                author_photo = author.profile_pic.url
-            else:
-                author_photo = settings.STATIC_URL + "img/anonymous.png"
+            author_photo = author.profile_pic.url if author.profile_pic else settings.STATIC_URL + "img/anonymous.png"
         except models.User.DoesNotExist:
             author_name  = "Unknown"
             author_photo = settings.STATIC_URL + "img/anonymous.png"
 
-        # compute percentages as before
-        total = (
-            question.response1 +
-            question.response2 +
-            question.response3 +
-            question.response4
-        ) or 1
-        pct1 = (question.response1 * 100) / total
-        pct2 = (question.response2 * 100) / total
-        pct3 = (question.response3 * 100) / total
-        pct4 = (question.response4 * 100) / total
+        # fetch all responses/options
+        responses = list(models.PollResponses.objects.filter(questionid=q.questionid))
+        total_votes = sum(r.response for r in responses) or 1
 
-        questionsData.append({
-            "questionnumber": question.questionnumber,
+        opts = []
+        for r in responses:
+            opts.append({
+                "optionid":       r.optionid,
+                "optionDescription": r.optionDescription,
+                "image":          r.image.url if r.image else None,
+                "percentage":     round(r.response * 100.0 / total_votes, 1),
+            })
+
+        polls.append({
+            "questionid":     q.questionid,
             "author_name":    author_name,
             "author_photo":   author_photo,
-            "question":       question.question,
-            "option1":        question.option1,
-            "option2":        question.option2,
-            "option3":        question.option3,
-            "option4":        question.option4,
-            "percentage1":    pct1,
-            "percentage2":    pct2,
-            "percentage3":    pct3,
-            "percentage4":    pct4,
+            "question":       q.pollDescription,
+            "question_image": q.image.url if q.image else None,
+            "options":        opts,
         })
 
     return render(request, "dashboard.html", {
-        "name":          user.name,
-        "email":         email,
-        "username":      user.username,
-        "phonenumber":   user.phonenumber,
-        "message":       "Login successful",
-        "questionsData": questionsData,
+        "name":   user.name,
+        "email":  email,
+        "username": user.username,
+        "phonenumber": user.phonenumber,
+        "polls":  polls,
     })
-    
+
 def post(request, email):
+    # decode & fetch user
     email = urllib.parse.unquote(email)
-    user = models.User.objects.get(email=email)
-    if user.logintime == user.logouttime:
-        if request.method == "POST":
-            question = request.POST.get('question')
-            option1 = request.POST.get('option1')
-            option2 = request.POST.get('option2')
-            option3 = request.POST.get('option3')
-            option4 = request.POST.get('option4')
-            questionPost = models.Polls(authoremail=email, question=question, option1=option1, option2=option2, option3=option3, option4=option4)
-            questionPost.save()
-            return render(request,"post.html",{"name" : user.name, "email": email, "username": user.username, "phonenumber": user.phonenumber, "message":"Login successful"})
-        else:
-            return render(request,"post.html",{"name" : user.name, "email": email, "username": user.username, "phonenumber": user.phonenumber, "message":"Login successful"})
-    else:
+    user  = models.User.objects.get(email=email)
+
+    # only allow if logged-in
+    if user.logintime != user.logouttime:
         return redirect("login")
 
+    if request.method == "POST":
+        # — save question —
+        question      = request.POST.get("question", "").strip()
+        question_image = request.FILES.get("question_image")
+        q = models.PollQuestions(
+            authoremail     = email,
+            pollDescription = question,
+            image           = question_image
+        )
+        q.save()
+
+        # — save all options —
+        count = int(request.POST.get("option_count", "0"))
+        for i in range(count):
+            desc = request.POST.get(f"option_desc_{i}", "").strip()
+            img  = request.FILES.get(f"option_img_{i}")
+            if desc:
+                models.PollResponses(
+                    questionid         = q.questionid,
+                    optionDescription  = desc,
+                    image              = img
+                ).save()
+
+        return render(request, "post.html", {
+            "name":      user.name,
+            "email":     email,
+            "username":  user.username,
+            "phonenumber": user.phonenumber,
+            "message":   "Poll successfully posted!"
+        })
+
+    # GET → blank form (draft is loaded client-side)
+    return render(request, "post.html", {
+        "name":       user.name,
+        "email":      email,
+        "username":   user.username,
+        "phonenumber":user.phonenumber
+    })
+
+@csrf_exempt
+def post_poll_api(request, email):
+    """Accepts multipart/form-data POST, returns JSON response."""
+    # Only POST
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method"}, status=400)
+
+    # Auth
+    email = urllib.parse.unquote(email)
+    user  = get_object_or_404(models.User, email=email)
+    if user.logintime != user.logouttime:
+        return JsonResponse({"error": "Not logged in"}, status=403)
+
+    # 1) Question
+    q_text  = request.POST.get("question", "").strip()
+    q_image = request.FILES.get("question_image")
+    if not q_text:
+        return JsonResponse({"error": "Question text required"}, status=400)
+
+    question = models.PollQuestions(
+        authoremail     = email,
+        pollDescription = q_text,
+        image           = q_image
+    )
+    question.save()
+
+    # 2) Options
+    try:
+        count = int(request.POST.get("option_count", 0))
+    except ValueError:
+        count = 0
+
+    saved = 0
+    for i in range(count):
+        desc = request.POST.get(f"option_desc_{i}", "").strip()
+        img  = request.FILES.get(f"option_img_{i}")
+        if desc:
+            models.PollResponses(
+                questionid        = question.questionid,
+                optionDescription = desc,
+                image             = img
+            ).save()
+            saved += 1
+
+    if saved == 0:
+        question.delete()
+        return JsonResponse({"error": "At least one option required"}, status=400)
+
+    return JsonResponse({
+        "message":       "Poll successfully posted!",
+        "question_id":   question.questionid,
+        "options_saved": saved
+    })
 
 @csrf_exempt
 def vote(request):
     if request.method != "POST":
-        return JsonResponse({"error": "Invalid request"}, status=400)
+        return JsonResponse({"error": "Invalid request method"}, status=400)
 
-    data = json.loads(request.body)
-    qn = int(data.get("questionnumber"))
-    opt = int(data.get("optionnumber"))
-    poll = models.Polls.objects.get(questionnumber=qn)
+    try:
+        data       = json.loads(request.body)
+        qn         = int(data.get("questionid"))
+        option_id  = int(data.get("optionid"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Bad payload"}, status=400)
 
-    if   opt == 1: poll.response1 += 1
-    elif opt == 2: poll.response2 += 1
-    elif opt == 3: poll.response3 += 1
-    elif opt == 4: poll.response4 += 1
-    poll.save()
+    # 1) bump the counter
+    try:
+        resp = models.PollResponses.objects.get(
+            questionid=qn,
+            optionid=option_id
+        )
+    except models.PollResponses.DoesNotExist:
+        return JsonResponse({"error": "Invalid option or question"}, status=404)
 
-    # recompute percentages
-    total = poll.response1 + poll.response2 + poll.response3 + poll.response4 or 1
-    p1 = round(poll.response1 * 100 / total, 1)
-    p2 = round(poll.response2 * 100 / total, 1)
-    p3 = round(poll.response3 * 100 / total, 1)
-    p4 = round(poll.response4 * 100 / total, 1)
+    resp.response += 1
+    resp.save()
+
+    # 2) recompute percentages
+    all_resps = models.PollResponses.objects.filter(questionid=qn)
+    total     = sum(r.response for r in all_resps) or 1
+
+    percentages = {
+        str(r.optionid): round(r.response * 100.0 / total, 1)
+        for r in all_resps
+    }
 
     return JsonResponse({
-        "message": "Vote recorded!",
-        "percentages": {
-            "1": p1,
-            "2": p2,
-            "3": p3,
-            "4": p4
-        }
+        "message":     "Vote recorded!",
+        "percentages": percentages
     })
+
+
 
 def chat(request, email):
     email = urllib.parse.unquote(email)
@@ -447,21 +530,8 @@ def submit_exam(request):
         "wrong": wrong
     })
 
-# def liveleaderboard(request, email):
-#     email = urllib.parse.unquote(email)
-#     user = models.User.objects.get(email=email)
-#     if user.logintime == user.logouttime:
-#         return render(request, "liveleaderboard.html", {"email": email})
-#     else:
-#         return render(request, "Login.html")
-
-
 
 def liveleaderboard_page(request, email):
-    """
-    Renders the HTML page where the teacher can enter an Exam ID
-    and then see the live leaderboard.
-    """
     # decode the email if it was URL-encoded
     email = urllib.parse.unquote(email)
 
@@ -475,10 +545,6 @@ def liveleaderboard_page(request, email):
 
 @csrf_exempt
 def liveleaderboard_data(request, email):
-    """
-    Returns JSON for AJAX calls:
-      ?examid=<int>&page=<int>
-    """
     # decode email
     email = urllib.parse.unquote(email)
 

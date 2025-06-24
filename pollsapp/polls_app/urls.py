@@ -7,6 +7,7 @@ urlpatterns = [
     path("login",views.login,name = "login"),
     path("dashboard/<str:email>",views.dashboard,name="dashboard"),
     path("post/<str:email>",views.post,name="post"),
+    path("post_poll/<str:email>",views.post_poll_api,name="post_poll"),
     path("logout/<str:email>",views.logout,name="logout"),
     path("vote/", views.vote, name="vote"),
     path("chat/<str:email>",views.chat,name="chat"),
@@ -21,17 +22,6 @@ urlpatterns = [
     path("load-exam/",views.loadExam,name="loadExam"),
     path("submit-exam/",views.submit_exam,name="submitExam"),
     path("get-exam-meta/",views.get_exam_meta,name="get-exam-meta"),
-    # path("liveleaderboard/<str:email>",views.liveleaderboard,name="liveleaderboard"),
-    path(
-        'liveleaderboard/<str:email>/',
-        views.liveleaderboard_page,
-        name='liveleaderboard'
-    ),
-
-    # Serves JSON data for AJAX
-    path(
-        'liveleaderboard-data/<str:email>/',
-        views.liveleaderboard_data,
-        name='liveleaderboard-data'
-    ),
+    path('liveleaderboard/<str:email>/',views.liveleaderboard_page,name='liveleaderboard'),
+    path('liveleaderboard-data/<str:email>/',views.liveleaderboard_data,name='liveleaderboard-data'),
 ]
