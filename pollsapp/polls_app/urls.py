@@ -24,4 +24,7 @@ urlpatterns = [
     path("get-exam-meta/",views.get_exam_meta,name="get-exam-meta"),
     path('liveleaderboard/<str:email>/',views.liveleaderboard_page,name='liveleaderboard'),
     path('liveleaderboard-data/<str:email>/',views.liveleaderboard_data,name='liveleaderboard-data'),
+    path('poll/like/',  views.poll_like,    name='poll_like'),
+    path('poll/dislike/', views.poll_dislike, name='poll_dislike'),
+    path('poll/status/', views.poll_status, name='poll_status'),
 ]

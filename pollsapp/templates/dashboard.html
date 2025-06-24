@@ -6,13 +6,16 @@
   <title>Dashboard</title>
   <style>
     .navbar a { margin-right: 1em; }
-    .poll { border: 1px solid #ccc; padding: 1em; margin-bottom: 2em; }
+    .poll { border: 1px solid #ccc; padding: 1em; margin-bottom: 2em; position: relative; }
     .poll-header { display: flex; align-items: center; margin-bottom: 0.5em; }
     .poll-header img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 10px; }
+    .poll-actions { position: absolute; top: 1em; right: 1em; }
+    .poll-actions button { background: none; border: none; font-size: 1.1em; margin-left: 0.5em; cursor: pointer; }
     .poll-options h4 { display: flex; align-items: center; margin-bottom: 0.6em; }
     .poll-options img { max-height: 35px; margin-left: 10px; }
     .vote-btn { margin-right: 10px; }
     .question-image { margin-top: 0.6em; max-width: 100%; max-height: 200px; }
+    .disabled { opacity: 0.5; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -28,7 +31,24 @@
   <h1>Welcome, {{ name }}</h1>
 
   {% for poll in polls %}
-    <div class="poll">
+    <div class="poll" data-qn="{{ poll.questionid }}">
+
+      <!-- Like / Dislike -->
+      <div class="poll-actions">
+        <button type="button"
+                class="like-btn"
+                data-qn="{{ poll.questionid }}"
+                title="Like">
+          👍 <span id="like-count-{{ poll.questionid }}">{{ poll.likes }}</span>
+        </button>
+        <button type="button"
+                class="dislike-btn"
+                data-qn="{{ poll.questionid }}"
+                title="Dislike">
+          👎 <span id="dislike-count-{{ poll.questionid }}">{{ poll.dislikes }}</span>
+        </button>
+      </div>
+
       <div class="poll-header">
         <img src="{{ poll.author_photo }}" alt="{{ poll.author_name }}’s avatar" />
         <h3 style="margin: 0;">{{ poll.author_name }}</h3>
@@ -53,7 +73,7 @@
               {{ opt.optionDescription }}
             </button>
             <span id="pct-{{ poll.questionid }}-{{ opt.optionid }}">
-              {{ opt.percentage|default:0.0|floatformat:1 }}%
+              {{ opt.percentage|floatformat:1 }}%
             </span>
 
             {% if opt.image %}
@@ -66,9 +86,12 @@
   {% endfor %}
 
   <script>
-    // point at your email‐free vote endpoint
-    const VOTE_URL = "{% url 'vote' %}";
+    const VOTE_URL    = "{% url 'vote' %}";
+    const LIKE_URL    = "{% url 'poll_like' %}";
+    const DISLIKE_URL = "{% url 'poll_dislike' %}";
+    const STATUS_URL  = "{% url 'poll_status' %}";
 
+    // CSRF helper
     function getCookie(name) {
       let cookieValue = null;
       if (document.cookie && document.cookie !== "") {
@@ -81,55 +104,128 @@
       }
       return cookieValue;
     }
+    const CSRF_TOKEN = getCookie("csrftoken");
 
-    // now using sessionStorage instead of localStorage
-    const STORAGE_KEY = "votedQuestions";
-    const votedSet = new Set(JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]"));
+    // storage keys & sets
+    const votedKey    = "votedPolls";
+    const likedKey    = "likedPolls";
+    const dislikedKey = "dislikedPolls";
 
-    // disable any already‐voted buttons on load
+    const votedSet     = new Set(JSON.parse(sessionStorage.getItem(votedKey)    || "[]"));
+    const likedSet     = new Set(JSON.parse(sessionStorage.getItem(likedKey)    || "[]"));
+    const dislikedSet  = new Set(JSON.parse(sessionStorage.getItem(dislikedKey) || "[]"));
+
     document.addEventListener("DOMContentLoaded", () => {
+      // disable already-used buttons
       votedSet.forEach(qn => {
         document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
-                .forEach(btn => btn.disabled = true);
+                .forEach(b => b.classList.add("disabled"));
       });
+      likedSet.forEach(qn => {
+        document.querySelector(`.like-btn[data-qn='${qn}']`)
+                .classList.add("disabled");
+      });
+      dislikedSet.forEach(qn => {
+        document.querySelector(`.dislike-btn[data-qn='${qn}']`)
+                .classList.add("disabled");
+      });
+
+      // prime live status immediately
+      fetchStatus();
     });
 
-    function vote(button) {
-      const qn  = button.dataset.qn;
-      const opt = button.dataset.opt;
+    // apply status data to DOM
+    function applyStatus(data) {
+      Object.entries(data).forEach(([qn, info]) => {
+        // likes/dislikes
+        const l = document.getElementById(`like-count-${qn}`);
+        const d = document.getElementById(`dislike-count-${qn}`);
+        if (l) l.textContent    = info.likes;
+        if (d) d.textContent    = info.dislikes;
+        // vote percentages
+        Object.entries(info.percentages).forEach(([optid, pct]) => {
+          const span = document.getElementById(`pct-${qn}-${optid}`);
+          if (span) span.textContent = `${pct}%`;
+        });
+      });
+    }
 
+    // fetch live status
+    function fetchStatus() {
+      fetch(STATUS_URL, {
+        headers: { "X-CSRFToken": CSRF_TOKEN }
+      })
+      .then(r => r.json())
+      .then(applyStatus)
+      .catch(console.error);
+    }
+    // refresh every 5s
+    setInterval(fetchStatus, 5000);
+
+    // voting
+    function vote(btn) {
+      const qn  = btn.dataset.qn;
+      const opt = btn.dataset.opt;
       if (votedSet.has(qn)) return;
 
       fetch(VOTE_URL, {
         method: "POST",
         headers: {
-          "Content-Type":  "application/json",
-          "X-CSRFToken":    getCookie("csrftoken")
+          "Content-Type": "application/json",
+          "X-CSRFToken":   CSRF_TOKEN
         },
         body: JSON.stringify({ questionid: qn, optionid: opt })
       })
       .then(r => r.json())
       .then(data => {
-        if (data.error) {
-          return alert("Error: " + data.error);
-        }
-
-        // live-update percentages
-        Object.entries(data.percentages).forEach(([oid, pct]) => {
-          const span = document.getElementById(`pct-${qn}-${oid}`);
-          if (span) span.textContent = `${pct}%`;
-        });
-
-        // disable this poll's buttons
+        if (data.error) return alert(data.error);
+        applyStatus({ [qn]: data });  // update only this poll’s percentages
         document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
-                .forEach(btn => btn.disabled = true);
-
-        // persist in sessionStorage only
+                .forEach(b => b.classList.add("disabled"));
         votedSet.add(qn);
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...votedSet]));
+        sessionStorage.setItem(votedKey, JSON.stringify([...votedSet]));
       })
       .catch(console.error);
     }
+
+    // reaction handler
+    function react(qn, url, spanId, storeSet, storeKey, oppositeSet, oppositeBtnClass) {
+      if (storeSet.has(qn) || oppositeSet.has(qn)) return;
+
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken":   CSRF_TOKEN
+        },
+        body: JSON.stringify({ questionid: qn })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return alert(data.error);
+        document.getElementById(spanId).textContent = data.count;
+        // disable both reaction buttons
+        document.querySelector(`.${oppositeBtnClass}[data-qn='${qn}']`)
+                .classList.add("disabled");
+        document.querySelector(`.${storeKey.replace("Polls","Btn").toLowerCase()}[data-qn='${qn}']`)
+                .classList.add("disabled");
+        storeSet.add(qn);
+        sessionStorage.setItem(storeKey, JSON.stringify([...storeSet]));
+      })
+      .catch(console.error);
+    }
+
+    // wire up like/dislike clicks
+    document.body.addEventListener("click", e => {
+      if (e.target.matches(".like-btn")) {
+        const qn = e.target.dataset.qn;
+        react(qn, LIKE_URL, `like-count-${qn}`, likedSet, likedKey, dislikedSet, "dislike-btn");
+      }
+      if (e.target.matches(".dislike-btn")) {
+        const qn = e.target.dataset.qn;
+        react(qn, DISLIKE_URL, `dislike-count-${qn}`, dislikedSet, dislikedKey, likedSet, "like-btn");
+      }
+    });
   </script>
 </body>
 </html>

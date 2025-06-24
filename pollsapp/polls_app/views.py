@@ -245,6 +245,53 @@ def vote(request):
     })
 
 
+def poll_like(request):
+    try:
+        data = json.loads(request.body)
+        qn   = int(data.get("questionid"))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Bad payload"}, status=400)
+
+    question = get_object_or_404(models.PollQuestions, questionid=qn)
+    question.likes += 1
+    question.save()
+
+    return JsonResponse({"count": question.likes})
+
+
+def poll_dislike(request):
+    try:
+        data = json.loads(request.body)
+        qn   = int(data.get("questionid"))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Bad payload"}, status=400)
+
+    question = get_object_or_404(models.PollQuestions, questionid=qn)
+    question.dislikes += 1
+    question.save()
+
+    return JsonResponse({"count": question.dislikes})
+
+
+def poll_status(request):
+    data = {}
+    for q in models.PollQuestions.objects.all():
+        # gather responses
+        resps = models.PollResponses.objects.filter(questionid=q.questionid)
+        total = sum(r.response for r in resps) or 1
+        percents = {
+            str(r.optionid): round(r.response * 100.0 / total, 1)
+            for r in resps
+        }
+
+        data[str(q.questionid)] = {
+            "likes":      q.likes,
+            "dislikes":   q.dislikes,
+            "percentages": percents
+        }
+
+    return JsonResponse(data)
+
 
 def chat(request, email):
     email = urllib.parse.unquote(email)
