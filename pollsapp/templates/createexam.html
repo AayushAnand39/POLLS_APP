@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% comment %} <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -209,4 +209,250 @@
         }
     });
 </script>
-</html> 
+</html>  {% endcomment %}
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Create Examination</title>
+  <style>
+    .navbar a { margin-right:1em; }
+    .officialsection a { margin-right:1em; display:inline-block; margin-top:1em; }
+    .option-group { border:1px solid #ccc; padding:8px; margin-bottom:8px; border-radius:4px; }
+    .option-group img { max-height:100px; display:block; margin:4px 0; }
+    label { font-weight:bold; display:block; margin-top:8px; }
+    button { margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post' email=email %}">POST</a>
+    <a href="{% url 'chat' email=email %}">CHAT</a>
+    <a href="{% url 'official' email=email %}">OFFICIAL</a>
+    <a href="/profile">PROFILE</a>
+    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  </div>
+  <div class="officialsection">
+    <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
+    <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+    <a href="{% url 'liveleaderboard' email=email %}">LIVE LEADERBOARD</a>
+  </div>
+
+  <div class="questions">
+    <form id="metaForm" onsubmit="return createExamQuestions(event)">
+      <label>Creator Name</label>
+      <input type="text" name="name" id="name" required><br>
+      <label>Email</label>
+      <input type="email" name="email" id="email" required><br>
+      <label>Institution</label>
+      <input type="text" name="institution" id="institution" required><br>
+      <label>Phone Number</label>
+      <input type="text" name="phonenumber" id="phonenumber" required><br>
+      <label>Number of Questions</label>
+      <input type="number" name="number" id="number" required><br>
+      <label>Start Date</label>
+      <input type="date" name="date" id="date" required><br>
+      <label>Start Time</label>
+      <input type="time" name="starttime" id="starttime" required><br>
+      <label>End Time</label>
+      <input type="time" name="endtime" id="endtime" required><br>
+      <label>Description</label>
+      <textarea name="description" id="description" rows="2"></textarea><br>
+      <button type="submit">Create Exam</button>
+    </form>
+  </div>
+
+  <script>
+    function getCookie(n){let v=null;document.cookie.split(';').forEach(c=>{c=c.trim();if(c.startsWith(n+'='))v=decodeURIComponent(c.slice(n.length+1));});return v;}
+
+    let examid=null, questionCount=0, currentIndex=1, metadata={}, questionsCache={}, questionPK={};
+
+    function persistState(){
+      sessionStorage.setItem('metadata',JSON.stringify(metadata));
+      sessionStorage.setItem('examid',examid);
+      sessionStorage.setItem('questionCount',questionCount);
+      sessionStorage.setItem('currentIndex',currentIndex);
+      sessionStorage.setItem('questionsCache',JSON.stringify(questionsCache));
+      sessionStorage.setItem('questionPK',JSON.stringify(questionPK));
+    }
+    function restoreState(){
+      const m=sessionStorage.getItem('metadata'); if(!m) return false;
+      metadata=JSON.parse(m);
+      examid=sessionStorage.getItem('examid');
+      questionCount=+sessionStorage.getItem('questionCount');
+      currentIndex=+sessionStorage.getItem('currentIndex');
+      questionsCache=JSON.parse(sessionStorage.getItem('questionsCache')||'{}');
+      questionPK=JSON.parse(sessionStorage.getItem('questionPK')||'{}');
+      return true;
+    }
+
+    async function createExamQuestions(e){
+      e.preventDefault();
+      metadata=Object.fromEntries(new FormData(e.target).entries());
+      questionCount=+metadata.number;
+      const resp=await fetch('/send-data/',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+        body:JSON.stringify({formData:metadata})
+      });
+      const js=await resp.json();
+      examid=js.examid;
+      for(let i=1;i<=questionCount;i++){
+        questionsCache[i]={question:'',questionImage:null,
+                           explanation:'',positiveScore:0,negativeScore:0,
+                           correctOption:null,options:[]};
+      }
+      persistState();
+      renderQuestion(1);
+    }
+
+    function renderQuestion(q){
+      currentIndex=q; persistState();
+      const slot=questionsCache[q]??questionsCache[String(q)]??
+                 {question:'',questionImage:null,
+                  explanation:'',positiveScore:0,negativeScore:0,
+                  correctOption:null,options:[]};
+      const opts=slot.options=Array.isArray(slot.options)?slot.options:[];
+
+      document.querySelector('.questions').innerHTML=`
+        <h4>Exam ${examid} — Q${q}/${questionCount}</h4>
+        <form id="qform">
+          <label>Question Text</label>
+          <input type="text" name="question" value="${slot.question}" required><br>
+
+          <label>Question Image (optional)</label>
+          <input type="file" id="qimg" accept="image/*"><br>
+          <img id="qimgPreview" src="${slot.questionImage||''}"
+               style="display:${slot.questionImage?'block':'none'};max-height:100px;"><br>
+
+          <label>Explanation</label>
+          <textarea name="explanation" rows="2">${slot.explanation}</textarea><br>
+
+          <label>Positive Score</label>
+          <input type="number" name="positiveScore" value="${slot.positiveScore}" required><br>
+
+          <label>Negative Score</label>
+          <input type="number" name="negativeScore" value="${slot.negativeScore}" required><br>
+
+          <div><label>Options</label>
+            <button type="button" id="addOptionBtn">+ Add Option</button>
+          </div>
+          <div id="optionsContainer"></div><br>
+
+          <label>Correct Option</label>
+          <select id="correctSelect" required>
+            <option value="">-- select --</option>
+          </select><br>
+
+          <button type="submit">Save Question</button>
+        </form>
+
+        <button id="prevBtn" ${q===1?'disabled':''}>Previous</button>
+        ${q<questionCount?'<button id="nextBtn">Next</button>':'<button id="finishBtn">Finish</button>'}
+      `;
+
+      const form=document.getElementById('qform');
+      form.querySelector('[name="question"]').oninput=e=>{slot.question=e.target.value;persistState()};
+      form.querySelector('[name="explanation"]').oninput=e=>{slot.explanation=e.target.value;persistState()};
+      form.querySelector('[name="positiveScore"]').oninput=e=>{slot.positiveScore=+e.target.value;persistState()};
+      form.querySelector('[name="negativeScore"]').oninput=e=>{slot.negativeScore=+e.target.value;persistState()};
+
+      document.getElementById('qimg').onchange=e=>{
+        const r=new FileReader();
+        r.onload=ev=>{
+          slot.questionImage=ev.target.result;
+          const img=document.getElementById('qimgPreview');
+          img.src=ev.target.result;img.style.display='block';
+          persistState();
+        };
+        r.readAsDataURL(e.target.files[0]);
+      };
+
+      const optsDiv=document.getElementById('optionsContainer');
+      opts.forEach((opt,i)=>addOptionField(optsDiv,i,opt));
+      function rebuildCorrect(){
+        const sel=document.getElementById('correctSelect');
+        sel.innerHTML='<option value="">-- select --</option>';
+        opts.forEach((_,i)=>{
+          const val=i+1;
+          const o=document.createElement('option');
+          o.value=val; o.text=`Option ${val}`;
+          if(slot.correctOption===val) o.selected=true;
+          sel.append(o);
+        });
+      }
+      rebuildCorrect();
+
+      document.getElementById('addOptionBtn').onclick=()=>{
+        opts.push({id:null,desc:'',image:null});
+        addOptionField(optsDiv,opts.length-1,opts[opts.length-1]);
+        rebuildCorrect();persistState();
+      };
+      document.getElementById('correctSelect').onchange=e=>{
+        slot.correctOption=e.target.value===''?null:+e.target.value;
+        persistState();
+      };
+
+      form.onsubmit=e=>sendQuestion(e,q);
+      if(q>1)document.getElementById('prevBtn').onclick=()=>renderQuestion(q-1);
+      if(q<questionCount)document.getElementById('nextBtn').onclick=()=>renderQuestion(q+1);
+      else document.getElementById('finishBtn').onclick=()=>window.location.href="{% url 'dashboard' email=email %}";
+    }
+
+    function addOptionField(container,idx,opt){
+      const div=document.createElement('div');
+      div.className='option-group';
+      div.innerHTML=`
+        <input type="hidden" name="opt-id-${idx}" value="${opt.id||''}">
+        <label>Option ${idx+1} Text</label>
+        <input type="text" name="opt-desc-${idx}" value="${opt.desc}" required><br>
+
+        <label>Option Image (optional)</label>
+        <input type="file" name="opt-img-${idx}" accept="image/*"><br>
+
+        <img id="optImgPreview-${idx}" src="${opt.image||''}"
+             style="display:${opt.image?'block':'none'};max-height:100px;"><br>
+      `;
+      container.appendChild(div);
+
+      div.querySelector(`[name="opt-desc-${idx}"]`).oninput=e=>{
+        opt.desc=e.target.value;persistState();
+      };
+      div.querySelector(`[name="opt-img-${idx}"]`).onchange=e=>{
+        const r=new FileReader();
+        r.onload=ev=>{
+          opt.image=ev.target.result;
+          const img=document.getElementById(`optImgPreview-${idx}`);
+          img.src=ev.target.result;img.style.display='block';
+          persistState();
+        };
+        r.readAsDataURL(e.target.files[0]);
+      };
+    }
+
+    async function sendQuestion(e,q){
+      e.preventDefault();
+      const payload={examid,questionnumber:q,formData:questionsCache[q]};
+      if(questionPK[q])payload.pk=questionPK[q];
+      const resp=await fetch('/send-exam-question/',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+        body:JSON.stringify(payload)
+      });
+      const js=await resp.json();
+      questionPK[q]=js.pk;persistState();
+      alert(`Saved Q${q}`);
+    }
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      if(restoreState())renderQuestion(currentIndex);
+      else document.getElementById('metaForm').onsubmit=createExamQuestions;
+    });
+  </script>
+</body>
+</html>

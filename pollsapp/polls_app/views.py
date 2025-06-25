@@ -12,6 +12,11 @@ from datetime import datetime
 from django.conf import settings
 from django.forms.models import model_to_dict
 from django.core.paginator import Paginator
+import base64
+import imghdr
+import uuid
+from django.core.files.base import ContentFile
+from django.db import transaction
 
 # Create your views here.
 def index(request):
@@ -421,48 +426,48 @@ def sendData(request):
     else:
         return JsonResponse({"error": "error"}, status=400)
     
-@csrf_exempt
-def sendExamQuestion(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Invalid request"}, status=400)
+# @csrf_exempt
+# def sendExamQuestion(request):
+#     if request.method != "POST":
+#         return JsonResponse({"error": "Invalid request"}, status=400)
 
-    payload = json.loads(request.body)
-    examid         = payload.get("examid")
-    questionnumber = payload.get("questionnumber")
-    data           = payload.get("formData", {})
-    pk             = payload.get("pk")  # may be None
+#     payload = json.loads(request.body)
+#     examid         = payload.get("examid")
+#     questionnumber = payload.get("questionnumber")
+#     data           = payload.get("formData", {})
+#     pk             = payload.get("pk")  # may be None
 
-    # If the client already told us which PK to update, use it:
-    if pk:
-        try:
-            eq = models.ExamQuestions.objects.get(pk=pk, examid=examid)
-        except models.ExamQuestions.DoesNotExist:
-            return JsonResponse({"error": "Question not found"}, status=404)
-    else:
-        # Otherwise try to find an existing one by examid+questionnumber:
-        eq, created = models.ExamQuestions.objects.get_or_create(
-            examid=examid,
-            questionnumber=questionnumber,
-            defaults={}
-        )
+#     # If the client already told us which PK to update, use it:
+#     if pk:
+#         try:
+#             eq = models.ExamQuestions.objects.get(pk=pk, examid=examid)
+#         except models.ExamQuestions.DoesNotExist:
+#             return JsonResponse({"error": "Question not found"}, status=404)
+#     else:
+#         # Otherwise try to find an existing one by examid+questionnumber:
+#         eq, created = models.ExamQuestions.objects.get_or_create(
+#             examid=examid,
+#             questionnumber=questionnumber,
+#             defaults={}
+#         )
 
-    # Now update all fields from incoming data:
-    eq.question      = data.get("question",      eq.question)
-    eq.option1       = data.get("option1",       eq.option1)
-    eq.option2       = data.get("option2",       eq.option2)
-    eq.option3       = data.get("option3",       eq.option3)
-    eq.option4       = data.get("option4",       eq.option4)
-    eq.positiveScore = data.get("positive",      eq.positiveScore)
-    eq.negativeScore = data.get("negative",      eq.negativeScore)
-    eq.correctOption = data.get("correct",       eq.correctOption)
-    eq.save()
+#     # Now update all fields from incoming data:
+#     eq.question      = data.get("question",      eq.question)
+#     eq.option1       = data.get("option1",       eq.option1)
+#     eq.option2       = data.get("option2",       eq.option2)
+#     eq.option3       = data.get("option3",       eq.option3)
+#     eq.option4       = data.get("option4",       eq.option4)
+#     eq.positiveScore = data.get("positive",      eq.positiveScore)
+#     eq.negativeScore = data.get("negative",      eq.negativeScore)
+#     eq.correctOption = data.get("correct",       eq.correctOption)
+#     eq.save()
 
-    return JsonResponse({
-        "message":        "Question saved successfully",
-        "examid":         examid,
-        "questionnumber": questionnumber,
-        "pk":             eq.pk
-    }, status=200)
+#     return JsonResponse({
+#         "message":        "Question saved successfully",
+#         "examid":         examid,
+#         "questionnumber": questionnumber,
+#         "pk":             eq.pk
+#     }, status=200)
 
     
 def attendexam(request, email):
@@ -473,28 +478,28 @@ def attendexam(request, email):
     else:
         return render(request,"Login.html")
     
-def loadExam(request):
-    if request.method == "POST":
-        examid = json.loads(request.body).get("examid")
-        examdetails = models.ExamDetails.objects.get(examid = examid)
-        examDetails = model_to_dict(examdetails)
-        examquestiondetails = models.ExamQuestions.objects.filter(examid = examid).order_by("questionnumber")
-        examquestions = []
-        for details in examquestiondetails:
-            examquestions.append({
-                "questionnumber" : details.questionnumber,
-                "question" : details.question,
-                "option1" : details.option1,
-                "option2" : details.option2,
-                "option3" : details.option3,
-                "option4" : details.option4,
-                "positive" : details.positiveScore,
-                "negative" : details.negativeScore,
-                "correctoption" : details.correctOption
-            })
-        return JsonResponse({"message" : "Questions loaded successfully", "examquestions" : examquestions, "examid" : examid, "examdetails" : examDetails}, status=200)
-    else:
-        return JsonResponse({"error": "error"}, status=400) 
+# def loadExam(request):
+#     if request.method == "POST":
+#         examid = json.loads(request.body).get("examid")
+#         examdetails = models.ExamDetails.objects.get(examid = examid)
+#         examDetails = model_to_dict(examdetails)
+#         examquestiondetails = models.ExamQuestions.objects.filter(examid = examid).order_by("questionnumber")
+#         examquestions = []
+#         for details in examquestiondetails:
+#             examquestions.append({
+#                 "questionnumber" : details.questionnumber,
+#                 "question" : details.question,
+#                 "option1" : details.option1,
+#                 "option2" : details.option2,
+#                 "option3" : details.option3,
+#                 "option4" : details.option4,
+#                 "positive" : details.positiveScore,
+#                 "negative" : details.negativeScore,
+#                 "correctoption" : details.correctOption
+#             })
+#         return JsonResponse({"message" : "Questions loaded successfully", "examquestions" : examquestions, "examid" : examid, "examdetails" : examDetails}, status=200)
+#     else:
+#         return JsonResponse({"error": "error"}, status=400) 
     
 
 @csrf_exempt
@@ -683,3 +688,130 @@ def logout(request, email):
     else:
         print("Session ended")
         return redirect("index")
+    
+
+
+def _save_base64_image(data_url, upload_to):
+    if not data_url:
+        return None
+    header, b64 = data_url.split(",", 1)
+    img_data = base64.b64decode(b64)
+    ext = imghdr.what(None, h=img_data) or "png"
+    filename = f"{uuid.uuid4()}.{ext}"
+    return ContentFile(img_data, name=filename)
+
+@csrf_exempt
+def sendExamQuestion(request):
+    if request.method != "POST":
+        return JsonResponse({"error":"Invalid request"}, status=400)
+
+    payload        = json.loads(request.body)
+    examid         = payload.get("examid")
+    qnum           = payload.get("questionnumber")
+    data           = payload.get("formData", {})
+    question_pk    = payload.get("pk", None)
+
+    with transaction.atomic():
+        # 1) Fetch or create the ExamQuestions row
+        if question_pk:
+            eq = models.ExamQuestions.objects.get(pk=question_pk, examid=examid)
+        else:
+            eq, _ = models.ExamQuestions.objects.get_or_create(
+                examid=examid,
+                questionnumber=qnum
+            )
+
+        # 2) Update question-level fields
+        eq.question      = data.get("question",      eq.question)
+        eq.explanation   = data.get("explanation",   eq.explanation)
+        eq.positiveScore = data.get("positiveScore", eq.positiveScore)
+        eq.negativeScore = data.get("negativeScore", eq.negativeScore)
+        eq.correctOption = data.get("correctOption", eq.correctOption)
+
+        # Question image (optional)
+        qimg = _save_base64_image(data.get("questionImage"), upload_to="questions/")
+        if qimg:
+            eq.image.save(qimg.name, qimg, save=False)
+
+        eq.save()
+
+        # 3) Sync ExamOptions: update existing, delete removed, create new
+        incoming_opts = data.get("options", [])
+        # Collect all incoming IDs
+        incoming_ids = [opt.get("id") for opt in incoming_opts if opt.get("id")]
+
+        # a) Delete any options the user removed
+        models.ExamOptions.objects.filter(
+            questionid=eq.questionid
+        ).exclude(
+            optionid__in=incoming_ids
+        ).delete()
+
+        # b) Loop through incoming, update or create
+        for idx, od in enumerate(incoming_opts, start=1):
+            opt_id = od.get("id")
+            if opt_id:
+                # existing: fetch and update
+                opt = models.ExamOptions.objects.get(
+                    pk=opt_id,
+                    questionid=eq.questionid
+                )
+            else:
+                # brand new: create a fresh instance
+                opt = models.ExamOptions(questionid=eq.questionid)
+
+            # set the display order
+            opt.optionnumber = idx
+            # description
+            opt.optionDescription = od.get("desc", opt.optionDescription)
+
+            # optional image
+            imgf = _save_base64_image(od.get("image"), upload_to="options/")
+            if imgf:
+                opt.image.save(imgf.name, imgf, save=False)
+
+            opt.save()
+
+    return JsonResponse({
+        "message":        "Question saved successfully",
+        "examid":         examid,
+        "questionnumber": qnum,
+        "pk":             eq.pk
+    }, status=200)
+
+
+@csrf_exempt
+def loadExam(request):
+    if request.method != "POST":
+        return JsonResponse({"error":"Invalid"}, status=400)
+
+    examid = json.loads(request.body).get("examid")
+    exam   = models.ExamDetails.objects.get(examid=examid)
+    details= model_to_dict(exam)
+
+    qs = []
+    for q in models.ExamQuestions.objects.filter(examid=examid).order_by("questionnumber"):
+        qd = {
+            "questionnumber":  q.questionnumber,
+            "question":        q.question,
+            "questionImageUrl": q.image.url if q.image else None,
+            "explanation":     q.explanation,
+            "positiveScore":   q.positiveScore,
+            "negativeScore":   q.negativeScore,
+            "correctOption":   q.correctOption,
+            "options": []
+        }
+        for o in models.ExamOptions.objects.filter(questionid=q.questionid).order_by("optionnumber"):
+            qd["options"].append({
+                "optionnumber": o.optionnumber,
+                "desc":         o.optionDescription,
+                "imageUrl":     o.image.url if o.image else None
+            })
+        qs.append(qd)
+
+    return JsonResponse({
+        "message":       "Questions loaded",
+        "examid":        examid,
+        "examdetails":   details,
+        "examquestions": qs
+    }, status=200)

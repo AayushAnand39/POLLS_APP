@@ -70,14 +70,28 @@ class ExamQuestions(models.Model):
     questionnumber = models.IntegerField(default=0)
     examid = models.IntegerField(default=0)
     question = models.CharField(max_length=5000)
-    option1 = models.CharField(max_length=5000)
-    option2 = models.CharField(max_length=5000)
-    option3 = models.CharField(max_length=5000)
-    option4 = models.CharField(max_length=5000)
     positiveScore = models.IntegerField(default=0)
     negativeScore = models.IntegerField(default=0)
     correctOption = models.IntegerField(default=0)
     explanation = models.CharField(max_length=5000, null=True, blank=True)
+    image = models.ImageField(
+                upload_to="profiles/",
+                null=True,
+                blank=True,
+                help_text="Optional picture for the exam question"
+            )
+
+class ExamOptions(models.Model):
+    optionid = models.BigAutoField(primary_key=True)
+    optionnumber = models.IntegerField(default=0)
+    questionid = models.IntegerField(default=0)
+    optionDescription = models.CharField(max_length=5000)
+    image = models.ImageField(
+                upload_to="profiles/",
+                null=True,
+                blank=True,
+                help_text="Optional picture for the exam option"
+            )
 
 class ExamResults(models.Model):
     resultid = models.BigAutoField(primary_key=True)
