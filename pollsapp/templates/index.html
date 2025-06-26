@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% comment %} <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -15,5 +15,316 @@
         <a href="/login">LOGIN</a>
     </div>
     
+</body>
+</html> {% endcomment %}
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PollsMedia - Polls & Exams Hub</title>
+  <style>
+    /* Base resets */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #eee;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Navbar */
+    .navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 60px;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      z-index: 1000;
+    }
+    .navbar .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    .navbar .nav-links {
+      display: flex;
+      gap: 2rem;
+    }
+    .navbar .nav-links a {
+      font-weight: 600;
+      text-transform: uppercase;
+      transition: color .3s;
+    }
+    .navbar .nav-links a:hover {
+      color: #ff4fa3;
+    }
+    /* Hamburger */
+    .hamburger {
+      display: none;
+      flex-direction: column;
+      cursor: pointer;
+      gap: 5px;
+    }
+    .hamburger div {
+      width: 25px;
+      height: 3px;
+      background: #eee;
+      transition: transform .3s;
+    }
+
+    /* Hero section */
+    .hero {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #1f0037, #000000);
+      text-align: center;
+      padding: 0 1rem;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+      animation: pulse 2s infinite;
+    }
+    .hero .subtitle {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      max-width: 600px;
+      color: #ccc;
+      line-height: 1.4;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Section styling */
+    section {
+      padding: 3rem 2rem;
+      opacity: 0;
+      transform: translateX(0);
+      transition: opacity .8s ease-out, transform .8s ease-out;
+    }
+    section.from-left {
+      transform: translateX(-100px);
+      text-align: left;
+    }
+    section.from-right {
+      transform: translateX(100px);
+      text-align: right;
+    }
+    section.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .section-title {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: #ff4fa3;
+      position: relative;
+    }
+    .section-title::after {
+      content: '';
+      width: 50px;
+      height: 4px;
+      background: #8a2be2;
+      position: absolute;
+      left: 0; bottom: -8px;
+    }
+    /* Feature list: left-aligned default */
+    .feature-list {
+      list-style: none;
+      margin-top: 1rem;
+      padding-left: 1.5rem;
+    }
+    .feature-list li {
+      margin: .8rem 0;
+      position: relative;
+    }
+    .feature-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #8a2be2;
+    }
+    /* Override for right-aligned sections */
+    section.from-right .feature-list {
+      padding-left: 0;
+      padding-right: 1.5rem;
+    }
+    section.from-right .feature-list li::before {
+      left: auto;
+      right: 0;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      background: #080808;
+      font-size: 0.9rem;
+      color: #777;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .navbar .nav-links {
+        position: fixed;
+        top: 60px;
+        right: -100%;
+        height: calc(100% - 60px);
+        background: rgba(0,0,0,0.9);
+        flex-direction: column;
+        align-items: center;
+        width: 200px;
+        padding-top: 2rem;
+        gap: 1.5rem;
+        transition: right .3s ease-in-out;
+      }
+      .navbar .nav-links.open {
+        right: 0;
+      }
+      .hamburger {
+        display: flex;
+      }
+      /* For mobile, center all text */
+      section.from-right,
+      section.from-left {
+        text-align: center;
+      }
+      section.from-right .feature-list,
+      section.from-left .feature-list {
+        padding: 0;
+      }
+      section.from-right .feature-list li::before,
+      section.from-left .feature-list li::before {
+        left: 50%;
+        transform: translateX(-50%);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="logo">PollsMedia</div>
+    <div class="hamburger" id="hamburger">
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+    <div class="nav-links" id="navLinks">
+      <a href="/">Home</a>
+      <a href="/register">Register</a>
+      <a href="/login">Login</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <h1>Welcome to Polls & Exams Hub</h1>
+    <p class="subtitle">
+      PollsMedia brings you a unified platform to create, share, and engage with community polls and online exams in real-time. Navigate through interactive polls, cast your votes, and spark discussions. For educators and organizers, craft custom exams, track responses live, and celebrate top performers on our dynamic leaderboard—all within a sleek, dark-themed interface designed for uninterrupted focus and seamless interaction.
+    </p>
+  </div>
+
+  <section id="polls">
+    <h2 class="section-title">📊 Live Polls Feed</h2>
+    <ul class="feature-list">
+      <li>Scroll through recent polls posted by the community</li>
+      <li>Instant animations when a new poll is published</li>
+      <li>Poll cards flip on hover to reveal vote counts</li>
+    </ul>
+  </section>
+
+  <section id="reactions">
+    <h2 class="section-title">👍 React & Engage</h2>
+    <ul class="feature-list">
+      <li>Like/dislike or ❤️ love any poll in one click</li>
+      <li>Live reaction counters update in real time</li>
+      <li>Smooth color transition on reaction buttons</li>
+    </ul>
+  </section>
+
+  <section id="chat">
+    <h2 class="section-title">💬 Community Chat</h2>
+    <ul class="feature-list">
+      <li>Slide-in chat widget from bottom-right</li>
+      <li>Dark-themed messages with pink & purple accents</li>
+      <li>Emoji picker with glow effect on hover</li>
+    </ul>
+  </section>
+
+  <section id="create-exam">
+    <h2 class="section-title">📝 Create an Exam</h2>
+    <ul class="feature-list">
+      <li>Drag-and-drop question builder</li>
+      <li>Customizable time limits and scoring</li>
+      <li>Preview mode with live styling</li>
+    </ul>
+  </section>
+
+  <section id="attend-exam">
+    <h2 class="section-title">🎯 Attend Exam</h2>
+    <ul class="feature-list">
+      <li>Full-screen immersive exam mode</li>
+      <li>Progress bar with pulsating effect</li>
+      <li>Countdown timer in shadered header</li>
+    </ul>
+  </section>
+
+  <section id="leaderboard">
+    <h2 class="section-title">🏆 Live Leaderboard</h2>
+    <ul class="feature-list">
+      <li>Real-time ranking updates as answers are submitted</li>
+      <li>Highlight top 3 scorers in neon glow</li>
+      <li>Smooth scroll-spy to keep leaderboard visible</li>
+    </ul>
+  </section>
+
+  <footer>
+    &copy; 2025 PollsMedia · Built with ❤️ in black, pink & purple
+  </footer>
+
+  <script>
+    // Initial positioning classes for alternating reveal
+    const sections = document.querySelectorAll('section');
+    sections.forEach((sec, idx) => {
+      sec.classList.add(idx % 2 === 0 ? 'from-left' : 'from-right');
+    });
+
+    // Scroll reveal
+    const revealOnScroll = () => {
+      const triggerY = window.innerHeight * 0.85;
+      sections.forEach(sec => {
+        if (sec.getBoundingClientRect().top < triggerY) sec.classList.add('visible');
+      });
+    };
+    window.addEventListener('scroll', revealOnScroll);
+    window.addEventListener('load', revealOnScroll);
+
+    // Hamburger toggle
+    const hamburger = document.getElementById('hamburger');
+    const navLinks = document.getElementById('navLinks');
+    hamburger.addEventListener('click', () => {
+      navLinks.classList.toggle('open');
+      hamburger.classList.toggle('active');
+    });
+  </script>
+
 </body>
 </html>
