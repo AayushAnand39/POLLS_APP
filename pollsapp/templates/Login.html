@@ -1,0 +1,181 @@
+{% comment %} <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+</head>
+<body>
+    <div class="navbar">
+        <a href="/">HOME</a>
+        <a href="/register">REGISTER</a>
+        <a href="/login">LOGIN</a>
+    </div>
+    <form action="/login" method="post">
+        {% csrf_token %}
+        <input type="email" name="email" id="email" placeholder="Enter your Email id"><br>
+        <input type="text" name="username" id="username" placeholder="Enter your username"><br>
+        <input type="password" name="password" id="password" placeholder="Enter your password"><br>
+        <input type="submit" value="Login">
+    </form>
+</body>
+</html> {% endcomment %}
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PollsMedia - Login</title>
+  <style>
+    /* Base resets */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1f0037, #000000);
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Navbar */
+    .navbar {
+      height: 60px;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+    }
+    .navbar .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    .navbar .nav-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+    .navbar .nav-links a {
+      font-weight: 600;
+      text-transform: uppercase;
+      transition: color .3s;
+    }
+    .navbar .nav-links a:hover {
+      color: #ff4fa3;
+    }
+
+    /* Form Container */
+    .form-wrapper {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+    }
+    .login-form {
+      background: rgba(20,20,20,0.9);
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      width: 100%;
+      max-width: 350px;
+    }
+    .login-form h2 {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      color: #ff4fa3;
+    }
+    .login-form .input-group {
+      margin-bottom: 1rem;
+    }
+    .login-form .input-group input {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #eee;
+      font-size: 1rem;
+    }
+    .login-form .input-group input::placeholder {
+      color: #777;
+    }
+    .login-form input[type="submit"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 5px;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: opacity .3s;
+    }
+    .login-form input[type="submit"]:hover {
+      opacity: 0.9;
+    }
+    .login-form .messageclass {
+      margin-top: 1rem;
+      text-align: center;
+      color: #ff4fa3;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 1rem;
+      background: #080808;
+      font-size: 0.85rem;
+      color: #777;
+    }
+
+    @media (max-width: 480px) {
+      .login-form { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="logo">PollsMedia</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/register">Register</a>
+      <a href="/login">Login</a>
+    </div>
+  </nav>
+
+  <div class="form-wrapper">
+    <form class="login-form" action="/login" method="post">
+      {% csrf_token %}
+      <h2>Welcome Back</h2>
+      <div class="input-group">
+        <input type="email" name="email" id="email" placeholder="Enter your Email ID" required>
+      </div>
+      <div class="input-group">
+        <input type="text" name="username" id="username" placeholder="Enter your Username" required>
+      </div>
+      <div class="input-group">
+        <input type="password" name="password" id="password" placeholder="Enter your Password" required>
+      </div>
+      <input type="submit" value="Login">
+      {% if message %}
+        <div class="messageclass">{{ message }}</div>
+      {% endif %}
+    </form>
+  </div>
+
+  <footer>
+    &copy; 2025 PollsMedia · Built with ❤️ in black, pink & purple
+  </footer>
+
+</body>
+</html>

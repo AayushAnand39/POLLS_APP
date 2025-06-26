@@ -1,0 +1,107 @@
+{% comment %} <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Official</title>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+        <a href="{% url 'post' email=email %}">POST</a>
+        <a href="{% url 'chat' email=email %}">CHAT</a>
+        <a href="{% url 'official' email=email %}">OFFICIAL</a>
+        <a href="{% url 'profile'  email=email %}">PROFILE</a>
+        <a href="{% url 'logout' email=email %}">LOGOUT</a>
+    </div>
+    <div class="officialsection">
+        <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
+        <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+        <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
+    </div>
+</body>
+</html> {% endcomment %}
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PollsMedia - Official</title>
+  <style>
+    /* Reset & Base */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1f0037, #000); color: #eee; display: flex; flex-direction: column; min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Navbar */
+    .navbar { height: 60px; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; }
+    .navbar .logo { font-size: 1.5rem; font-weight: bold; background: linear-gradient(90deg, #ff4fa3, #8a2be2); -webkit-background-clip: text; color: transparent; }
+    .navbar .nav-links { display: flex; gap: 1.5rem; }
+    .navbar .nav-links a { font-weight: 600; text-transform: uppercase; transition: color .3s; }
+    .navbar .nav-links a:hover { color: #ff4fa3; }
+
+    /* Hero Section */
+    .hero { text-align: center; padding: 4rem 2rem; }
+    .hero h1 { font-size: 2.5rem; background: linear-gradient(90deg, #ff4fa3, #8a2be2); -webkit-background-clip: text; color: transparent; margin-bottom: 1rem; }
+    .hero p { max-width: 600px; margin: 0 auto; font-size: 1.1rem; line-height: 1.5; }
+
+    /* Features Section */
+    .features { display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem; padding: 2rem; }
+    .feature-card { background: rgba(20,20,20,0.9); border-radius: 8px; padding: 2rem; flex: 1 1 250px; max-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: transform .3s; }
+    .feature-card:hover { transform: translateY(-5px); }
+    .feature-card h2 { font-size: 1.4rem; color: #ff4fa3; margin-bottom: 1rem; }
+    .feature-card p { font-size: 1rem; line-height: 1.4; }
+
+    /* Buttons */
+    .feature-card a.btn { display: inline-block; margin-top: 1rem; padding: 0.6rem 1rem; border-radius: 5px; background: linear-gradient(90deg, #ff4fa3, #8a2be2); color: #fff; text-transform: uppercase; font-weight: 600; transition: opacity .3s; }
+    .feature-card a.btn:hover { opacity: 0.9; }
+
+    /* Responsive */
+    @media(max-width:768px) { .features { flex-direction: column; align-items: center; } }
+    footer { text-align: center; padding: 1rem; background: #080808; font-size: 0.85rem; color: #777; margin-top: auto; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="logo">PollsMedia</div>
+    <div class="nav-links">
+      <a href="{% url 'dashboard' email=email %}">Dashboard</a>
+      <a href="{% url 'post' email=email %}">Post</a>
+      <a href="{% url 'chat' email=email %}">Chat</a>
+      <a href="{% url 'official' email=email %}">Official</a>
+      <a href="{% url 'profile' email=email %}">Profile</a>
+      <a href="{% url 'logout' email=email %}">Logout</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>Official Exams & Leaderboards</h1>
+    <p>Manage and participate in official examinations seamlessly. Create tests with custom questions, allow users to attend and submit answers, and view a real-time leaderboard to track top performers.</p>
+  </section>
+
+  <section class="features">
+    <div class="feature-card">
+      <h2>Create Examination</h2>
+      <p>Build your exam by adding multiple-choice or descriptive questions, set time limits, and configure scoring rules. Customizable settings ensure your exam meets all requirements.</p>
+      <a href="{% url 'createexam' email=email %}" class="btn">Create Exam</a>
+    </div>
+    <div class="feature-card">
+      <h2>Attend Examination</h2>
+      <p>Browse available exams, view instructions, and start your test. A user-friendly interface guides you through each question, with progress tracking and autosave features.</p>
+      <a href="{% url 'attendexam' email=email %}" class="btn">Attend Exam</a>
+    </div>
+    <div class="feature-card">
+      <h2>Live Leaderboard</h2>
+      <p>See real-time rankings as participants submit their answers. Filter by exam, date, or participant, and celebrate top scorers on a dynamic leaderboard updated every few seconds.</p>
+      <a href="{% url 'liveleaderboard' email=email %}" class="btn">View Leaderboard</a>
+    </div>
+  </section>
+
+  <footer>
+    &copy; 2025 PollsMedia &middot; Built with ❤️ in black, pink & purple
+  </footer>
+</body>
+</html>

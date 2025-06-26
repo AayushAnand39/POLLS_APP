@@ -1,0 +1,930 @@
+{% comment %} <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <style>
+    .navbar a { margin-right: 1em; }
+    .poll { border: 1px solid #ccc; padding: 1em; margin-bottom: 2em; position: relative; }
+    .poll-header { display: flex; align-items: center; margin-bottom: 0.5em; }
+    .poll-header img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 10px; }
+    .poll-actions { position: absolute; top: 1em; right: 1em; }
+    .poll-actions button { background: none; border: none; font-size: 1.1em; margin-left: 0.5em; cursor: pointer; }
+    .poll-options h4 { display: flex; align-items: center; margin-bottom: 0.6em; }
+    .poll-options img { max-height: 35px; margin-left: 10px; }
+    .vote-btn { margin-right: 10px; }
+    .question-image { margin-top: 0.6em; max-width: 100%; max-height: 200px; }
+    .disabled { opacity: 0.5; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post' email=email %}">POST</a>
+    <a href="{% url 'chat' email=email %}">CHAT</a>
+    <a href="{% url 'official' email=email %}">OFFICIAL</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
+    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  </div>
+
+  <h1>Welcome, {{ name }}</h1>
+
+  {% for poll in polls %}
+    <div class="poll" data-qn="{{ poll.questionid }}">
+
+      <!-- Like / Dislike -->
+      <div class="poll-actions">
+        <button type="button"
+                class="like-btn"
+                data-qn="{{ poll.questionid }}"
+                title="Like">
+          👍 <span id="like-count-{{ poll.questionid }}">{{ poll.likes }}</span>
+        </button>
+        <button type="button"
+                class="dislike-btn"
+                data-qn="{{ poll.questionid }}"
+                title="Dislike">
+          👎 <span id="dislike-count-{{ poll.questionid }}">{{ poll.dislikes }}</span>
+        </button>
+      </div>
+
+      <div class="poll-header">
+        <img src="{{ poll.author_photo }}" alt="{{ poll.author_name }}’s avatar" />
+        <h3 style="margin: 0;">{{ poll.author_name }}</h3>
+      </div>
+
+      <h2>{{ poll.question }}</h2>
+
+      {% if poll.question_image %}
+        <img class="question-image" src="{{ poll.question_image }}" alt="Poll image" />
+      {% endif %}
+
+      <div class="poll-options">
+        {% for opt in poll.options %}
+          <h4>
+            <button
+              type="button"
+              class="vote-btn"
+              data-qn="{{ poll.questionid }}"
+              data-opt="{{ opt.optionid }}"
+              id="btn-{{ poll.questionid }}-{{ opt.optionid }}"
+              onclick="vote(this)">
+              {{ opt.optionDescription }}
+            </button>
+            <span id="pct-{{ poll.questionid }}-{{ opt.optionid }}">
+              {{ opt.percentage|floatformat:1 }}%
+            </span>
+
+            {% if opt.image %}
+              <img src="{{ opt.image }}" alt="Option image">
+            {% endif %}
+          </h4>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <script>
+    const VOTE_URL    = "{% url 'vote' %}";
+    const LIKE_URL    = "{% url 'poll_like' %}";
+    const DISLIKE_URL = "{% url 'poll_dislike' %}";
+    const STATUS_URL  = "{% url 'poll_status' %}";
+
+    // CSRF helper
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== "") {
+        document.cookie.split(";").forEach(c => {
+          c = c.trim();
+          if (c.startsWith(name + "=")) {
+            cookieValue = decodeURIComponent(c.slice(name.length + 1));
+          }
+        });
+      }
+      return cookieValue;
+    }
+    const CSRF_TOKEN = getCookie("csrftoken");
+
+    // storage keys & sets
+    const votedKey    = "votedPolls";
+    const likedKey    = "likedPolls";
+    const dislikedKey = "dislikedPolls";
+
+    const votedSet     = new Set(JSON.parse(sessionStorage.getItem(votedKey)    || "[]"));
+    const likedSet     = new Set(JSON.parse(sessionStorage.getItem(likedKey)    || "[]"));
+    const dislikedSet  = new Set(JSON.parse(sessionStorage.getItem(dislikedKey) || "[]"));
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // disable already-used buttons
+      votedSet.forEach(qn => {
+        document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+                .forEach(b => b.classList.add("disabled"));
+      });
+      likedSet.forEach(qn => {
+        document.querySelector(`.like-btn[data-qn='${qn}']`)
+                .classList.add("disabled");
+      });
+      dislikedSet.forEach(qn => {
+        document.querySelector(`.dislike-btn[data-qn='${qn}']`)
+                .classList.add("disabled");
+      });
+
+      // prime live status immediately
+      fetchStatus();
+    });
+
+    // apply status data to DOM
+    function applyStatus(data) {
+      Object.entries(data).forEach(([qn, info]) => {
+        // likes/dislikes
+        const l = document.getElementById(`like-count-${qn}`);
+        const d = document.getElementById(`dislike-count-${qn}`);
+        if (l) l.textContent    = info.likes;
+        if (d) d.textContent    = info.dislikes;
+        // vote percentages
+        Object.entries(info.percentages).forEach(([optid, pct]) => {
+          const span = document.getElementById(`pct-${qn}-${optid}`);
+          if (span) span.textContent = `${pct}%`;
+        });
+      });
+    }
+
+    // fetch live status
+    function fetchStatus() {
+      fetch(STATUS_URL, {
+        headers: { "X-CSRFToken": CSRF_TOKEN }
+      })
+      .then(r => r.json())
+      .then(applyStatus)
+      .catch(console.error);
+    }
+    // refresh every 5s
+    setInterval(fetchStatus, 5000);
+
+    // voting
+    function vote(btn) {
+      const qn  = btn.dataset.qn;
+      const opt = btn.dataset.opt;
+      if (votedSet.has(qn)) return;
+
+      fetch(VOTE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken":   CSRF_TOKEN
+        },
+        body: JSON.stringify({ questionid: qn, optionid: opt })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return alert(data.error);
+        applyStatus({ [qn]: data });  // update only this poll’s percentages
+        document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+                .forEach(b => b.classList.add("disabled"));
+        votedSet.add(qn);
+        sessionStorage.setItem(votedKey, JSON.stringify([...votedSet]));
+      })
+      .catch(console.error);
+    }
+
+    // reaction handler
+    function react(qn, url, spanId, storeSet, storeKey, oppositeSet, oppositeBtnClass) {
+      if (storeSet.has(qn) || oppositeSet.has(qn)) return;
+
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken":   CSRF_TOKEN
+        },
+        body: JSON.stringify({ questionid: qn })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return alert(data.error);
+        document.getElementById(spanId).textContent = data.count;
+        // disable both reaction buttons
+        document.querySelector(`.${oppositeBtnClass}[data-qn='${qn}']`)
+                .classList.add("disabled");
+        document.querySelector(`.${storeKey.replace("Polls","Btn").toLowerCase()}[data-qn='${qn}']`)
+                .classList.add("disabled");
+        storeSet.add(qn);
+        sessionStorage.setItem(storeKey, JSON.stringify([...storeSet]));
+      })
+      .catch(console.error);
+    }
+
+    // wire up like/dislike clicks
+    document.body.addEventListener("click", e => {
+      if (e.target.matches(".like-btn")) {
+        const qn = e.target.dataset.qn;
+        react(qn, LIKE_URL, `like-count-${qn}`, likedSet, likedKey, dislikedSet, "dislike-btn");
+      }
+      if (e.target.matches(".dislike-btn")) {
+        const qn = e.target.dataset.qn;
+        react(qn, DISLIKE_URL, `dislike-count-${qn}`, dislikedSet, dislikedKey, likedSet, "like-btn");
+      }
+    });
+  </script>
+</body>
+</html> {% endcomment %}
+
+
+
+{% comment %} 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PollsMedia - Dashboard</title>
+  <style>
+    /* Base resets */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1f0037, #000000);
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Navbar */
+    .navbar {
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .navbar .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    .navbar .nav-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+    .navbar .nav-links a {
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 0.5rem;
+      transition: color .3s;
+    }
+    .navbar .nav-links a:hover {
+      color: #ff4fa3;
+    }
+
+    /* Dashboard title */
+    .dashboard-header {
+      text-align: center;
+      margin: 2rem 0;
+    }
+    .dashboard-header h1 {
+      font-size: 2rem;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    /* Poll card */
+    .poll {
+      background: rgba(20,20,20,0.9);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1rem auto;
+      max-width: 600px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      position: relative;
+      transition: transform .3s;
+    }
+    .poll:hover {
+      transform: translateY(-5px);
+    }
+
+    .poll-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .poll-header img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-right: 1rem;
+      border: 2px solid #ff4fa3;
+    }
+    .poll-header h3 {
+      font-size: 1.2rem;
+      color: #ff4fa3;
+    }
+
+    .poll h2 {
+      margin: 0.5rem 0 1rem;
+      font-size: 1.4rem;
+      line-height: 1.3;
+    }
+
+    .question-image {
+      display: block;
+      max-width: 100%;
+      border-radius: 6px;
+      margin-top: 0.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .poll-actions {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .poll-actions button {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      padding: 0.4rem 0.6rem;
+      border-radius: 5px;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: background .3s;
+    }
+    .poll-actions button:hover {
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      color: #000;
+    }
+    .poll-actions button span {
+      font-weight: bold;
+    }
+
+    .poll-options h4 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.8rem;
+    }
+    .poll-options button.vote-btn {
+      flex: 1;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 5px;
+      color: #eee;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background .3s;
+    }
+    .poll-options button.vote-btn:hover:not(.disabled) {
+      background: linear-gradient(90deg, #8a2be2, #ff4fa3);
+      color: #000;
+    }
+    .poll-options span {
+      min-width: 50px;
+      text-align: right;
+      font-weight: bold;
+      color: #ff4fa3;
+    }
+
+    .disabled {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .poll { padding: 1rem; margin: 1rem; }
+      .poll-actions { top: 0.8rem; right: 0.8rem; }
+      .poll-header img { width: 40px; height: 40px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="logo">PollsMedia</div>
+    <div class="nav-links">
+      <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+      <a href="{% url 'post'      email=email %}">POST</a>
+      <a href="{% url 'chat'      email=email %}">CHAT</a>
+      <a href="{% url 'official'  email=email %}">OFFICIAL</a>
+      <a href="{% url 'profile'  email=email %}">PROFILE</a>
+      <a href="{% url 'logout'    email=email %}">LOGOUT</a>
+    </div>
+  </nav>
+
+  <header class="dashboard-header">
+    <h1>Welcome, {{ name }}</h1>
+  </header>
+
+  {% for poll in polls %}
+  <div class="poll" data-qn="{{ poll.questionid }}">
+    <div class="poll-header">
+      <img src="{{ poll.author_photo }}" alt="{{ poll.author_name }}’s avatar" />
+      <h3>{{ poll.author_name }}</h3>
+    </div>
+
+    <h2>{{ poll.question }}</h2>
+    {% if poll.question_image %}<img class="question-image" src="{{ poll.question_image }}" alt="Poll image" />{% endif %}
+
+    <div class="poll-options">
+      {% for opt in poll.options %}
+      <h4>
+        <button type="button" class="vote-btn{% if opt.disabled %} disabled{% endif %}" 
+                data-qn="{{ poll.questionid }}" data-opt="{{ opt.optionid }}">
+          {{ opt.optionDescription }}
+        </button>
+        <span id="pct-{{ poll.questionid }}-{{ opt.optionid }}">
+          {{ opt.percentage|floatformat:1 }}%
+        </span>
+      </h4>
+      {% endfor %}
+    </div>
+
+    <div class="poll-actions">
+      <button type="button" class="like-btn{% if poll.liked %} disabled{% endif %}" data-qn="{{ poll.questionid }}">
+        👍 <span id="like-count-{{ poll.questionid }}">{{ poll.likes }}</span>
+      </button>
+      <button type="button" class="dislike-btn{% if poll.disliked %} disabled{% endif %}" data-qn="{{ poll.questionid }}">
+        👎 <span id="dislike-count-{{ poll.questionid }}">{{ poll.dislikes }}</span>
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <script>
+    const VOTE_URL    = "{% url 'vote' %}";
+    const LIKE_URL    = "{% url 'poll_like' %}";
+    const DISLIKE_URL = "{% url 'poll_dislike' %}";
+    const STATUS_URL  = "{% url 'poll_status' %}";
+
+    // CSRF helper
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== "") {
+        document.cookie.split(";").forEach(c => {
+          c = c.trim();
+          if (c.startsWith(name + "=")) {
+            cookieValue = decodeURIComponent(c.slice(name.length + 1));
+          }
+        });
+      }
+      return cookieValue;
+    }
+    const CSRF_TOKEN = getCookie("csrftoken");
+
+    // storage keys & sets
+    const votedKey    = "votedPolls";
+    const likedKey    = "likedPolls";
+    const dislikedKey = "dislikedPolls";
+
+    const votedSet     = new Set(JSON.parse(sessionStorage.getItem(votedKey)    || "[]"));
+    const likedSet     = new Set(JSON.parse(sessionStorage.getItem(likedKey)    || "[]"));
+    const dislikedSet  = new Set(JSON.parse(sessionStorage.getItem(dislikedKey) || "[]"));
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // disable already-used buttons
+      votedSet.forEach(qn => {
+        document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+                .forEach(b => b.classList.add("disabled"));
+      });
+      likedSet.forEach(qn => {
+        document.querySelector(`.like-btn[data-qn='${qn}']`)
+                .classList.add("disabled");
+      });
+      dislikedSet.forEach(qn => {
+        document.querySelector(`.dislike-btn[data-qn='${qn}']`)
+                .classList.add("disabled");
+      });
+
+      // prime live status immediately
+      fetchStatus();
+    });
+
+    // apply status data to DOM
+    function applyStatus(data) {
+      Object.entries(data).forEach(([qn, info]) => {
+        // likes/dislikes
+        const l = document.getElementById(`like-count-${qn}`);
+        const d = document.getElementById(`dislike-count-${qn}`);
+        if (l) l.textContent    = info.likes;
+        if (d) d.textContent    = info.dislikes;
+        // vote percentages
+        Object.entries(info.percentages).forEach(([optid, pct]) => {
+          const span = document.getElementById(`pct-${qn}-${optid}`);
+          if (span) span.textContent = `${pct}%`;
+        });
+      });
+    }
+
+    // fetch live status
+    function fetchStatus() {
+      fetch(STATUS_URL, {
+        headers: { "X-CSRFToken": CSRF_TOKEN }
+      })
+      .then(r => r.json())
+      .then(applyStatus)
+      .catch(console.error);
+    }
+    // refresh every 5s
+    setInterval(fetchStatus, 5000);
+
+    // voting
+    function vote(btn) {
+      const qn  = btn.dataset.qn;
+      const opt = btn.dataset.opt;
+      if (votedSet.has(qn)) return;
+
+      fetch(VOTE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken":   CSRF_TOKEN
+        },
+        body: JSON.stringify({ questionid: qn, optionid: opt })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return alert(data.error);
+        applyStatus({ [qn]: data });  // update only this poll’s percentages
+        document.querySelectorAll(`.vote-btn[data-qn='${qn}']`)
+                .forEach(b => b.classList.add("disabled"));
+        votedSet.add(qn);
+        sessionStorage.setItem(votedKey, JSON.stringify([...votedSet]));
+      })
+      .catch(console.error);
+    }
+
+    // reaction handler
+    function react(qn, url, spanId, storeSet, storeKey, oppositeSet, oppositeBtnClass) {
+      if (storeSet.has(qn) || oppositeSet.has(qn)) return;
+
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken":   CSRF_TOKEN
+        },
+        body: JSON.stringify({ questionid: qn })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) return alert(data.error);
+        document.getElementById(spanId).textContent = data.count;
+        // disable both reaction buttons
+        document.querySelector(`.${oppositeBtnClass}[data-qn='${qn}']`)
+                .classList.add("disabled");
+        document.querySelector(`.${storeKey.replace("Polls","Btn").toLowerCase()}[data-qn='${qn}']`)
+                .classList.add("disabled");
+        storeSet.add(qn);
+        sessionStorage.setItem(storeKey, JSON.stringify([...storeSet]));
+      })
+      .catch(console.error);
+    }
+
+    // wire up like/dislike clicks
+    document.body.addEventListener("click", e => {
+      if (e.target.matches(".like-btn")) {
+        const qn = e.target.dataset.qn;
+        react(qn, LIKE_URL, `like-count-${qn}`, likedSet, likedKey, dislikedSet, "dislike-btn");
+      }
+      if (e.target.matches(".dislike-btn")) {
+        const qn = e.target.dataset.qn;
+        react(qn, DISLIKE_URL, `dislike-count-${qn}`, dislikedSet, dislikedKey, likedSet, "like-btn");
+      }
+    });
+  </script>
+
+</body>
+</html> {% endcomment %}
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PollsMedia - Dashboard</title>
+  <style>
+    /* Base resets */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1f0037, #000000);
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Navbar */
+    .navbar {
+      width: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-radius: 8px;
+      margin: 0; /* removed vertical margin */
+    }
+    .navbar .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    .navbar .nav-links { display: flex; gap: 1.5rem; }
+    .navbar .nav-links a {
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 0.5rem;
+      transition: color .3s;
+    }
+    .navbar .nav-links a:hover { color: #ff4fa3; }
+
+    /* Dashboard title */
+    .dashboard-header {
+      text-align: center;
+      margin: 1rem 0;
+      width: 100%;
+      max-width: 800px;
+    }
+    .dashboard-header h1 {
+      font-size: 2rem;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    /* Poll card */
+    .poll {
+      width: 100%;
+      max-width: 600px;
+      background: rgba(20,20,20,0.9);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      position: relative;
+      transition: transform .3s;
+    }
+    .poll:hover { transform: translateY(-5px); }
+
+    .poll-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .poll-header img {
+      width: 50px; height: 50px;
+      border-radius: 50%; object-fit: cover;
+      margin-right: 1rem;
+      border: 2px solid #ff4fa3;
+    }
+    .poll-header h3 {
+      font-size: 1.2rem;
+      color: #ff4fa3;
+      word-break: break-word;
+    }
+
+    .poll h2 {
+      margin: 0.5rem 0 1rem;
+      font-size: 1.4rem;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+
+    .question-image {
+      display: block;
+      max-width: 100%;
+      border-radius: 6px;
+      margin: 0.8rem 0 1rem;
+      object-fit: cover;
+      max-height: 200px;
+    }
+
+    .poll-options {
+      margin-bottom: 1.5rem;
+    }
+    .poll-options .option-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.8rem;
+    }
+    .poll-options .option-row img.opt-img {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 4px;
+      margin-right: 0.5rem;
+    }
+    .poll-options .option-row .vote-btn {
+      flex: 1;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 5px;
+      color: #eee;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background .3s;
+      margin-right: 0.5rem;
+      text-align: left;
+    }
+    .poll-options .option-row .vote-btn:hover:not(.disabled) {
+      background: linear-gradient(90deg, #8a2be2, #ff4fa3);
+      color: #000;
+    }
+    .poll-options .option-row span.pct {
+      min-width: 50px;
+      text-align: right;
+      font-weight: bold;
+      color: #ff4fa3;
+    }
+
+    .poll-actions {
+      display: flex;
+      gap: 0.5rem;
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+    }
+    .poll-actions button {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      padding: 0.4rem 0.6rem;
+      border-radius: 5px;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      cursor: pointer;
+      transition: background .3s;
+    }
+    .poll-actions button:hover {
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      color: #000;
+    }
+    .poll-actions button span { font-weight: bold; }
+
+    .disabled { opacity: 0.6; pointer-events: none; }
+
+    @media (max-width: 600px) {
+      .poll { padding: 1rem; margin: 1rem; }
+      .poll-header img { width: 40px; height: 40px; }
+      .question-image { max-height: 120px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="logo">PollsMedia</div>
+    <div class="nav-links">
+      <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+      <a href="{% url 'post' email=email %}">POST</a>
+      <a href="{% url 'chat' email=email %}">CHAT</a>
+      <a href="{% url 'official' email=email %}">OFFICIAL</a>
+      <a href="{% url 'profile' email=email %}">PROFILE</a>
+      <a href="{% url 'logout' email=email %}">LOGOUT</a>
+    </div>
+  </nav>
+
+  <header class="dashboard-header">
+    <h1>Welcome, {{ name }}</h1>
+  </header>
+
+  {% for poll in polls %}
+  <div class="poll" data-qn="{{ poll.questionid }}">
+    <div class="poll-header">
+      <img src="{{ poll.author_photo }}" alt="{{ poll.author_name }}’s avatar" />
+      <h3>{{ poll.author_name }}</h3>
+    </div>
+
+    <h2>{{ poll.question }}</h2>
+    {% if poll.question_image %}
+      <img class="question-image" src="{{ poll.question_image }}" alt="Poll image" />
+    {% endif %}
+
+    <div class="poll-options">
+      {% for opt in poll.options %}
+      <div class="option-row">
+        {% if opt.image %}
+          <img class="opt-img" src="{{ opt.image }}" alt="Option image" />
+        {% endif %}
+        <button type="button" class="vote-btn{% if opt.disabled %} disabled{% endif %}" data-qn="{{ poll.questionid }}" data-opt="{{ opt.optionid }}">
+          {{ opt.optionDescription }}
+        </button>
+        <span class="pct" id="pct-{{ poll.questionid }}-{{ opt.optionid }}">{{ opt.percentage|floatformat:1 }}%</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="poll-actions">
+      <button type="button" class="like-btn{% if poll.liked %} disabled{% endif %}" data-qn="{{ poll.questionid }}">
+        👍 <span id="like-count-{{ poll.questionid }}">{{ poll.likes }}</span>
+      </button>
+      <button type="button" class="dislike-btn{% if poll.disliked %} disabled{% endif %}" data-qn="{{ poll.questionid }}">
+        👎 <span id="dislike-count-{{ poll.questionid }}">{{ poll.dislikes }}</span>
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <script>
+    document.body.addEventListener('click', e => {
+      const voteBtn = e.target.closest('.vote-btn');
+      if (voteBtn) {
+        const qn = voteBtn.dataset.qn;
+        const opt = voteBtn.dataset.opt;
+        if (!voteBtn.classList.contains('disabled')) {
+          fetch("{% url 'vote' %}", {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': document.cookie.split('=')[1]
+            },
+            body: JSON.stringify({ questionid: qn, optionid: opt })
+          })
+          .then(r=>r.json())
+          .then(data=>{
+            if (!data.error) {
+              updatePoll(qn, data);
+              document.querySelectorAll(`.vote-btn[data-qn='${qn}']`).forEach(b=>b.classList.add('disabled'));
+            }
+          });
+        }
+        return;
+      }
+      const likeBtn = e.target.closest('.like-btn');
+      if (likeBtn) { handleReaction(likeBtn, "{% url 'poll_like' %}", 'like-count-'); return; }
+      const dislikeBtn = e.target.closest('.dislike-btn');
+      if (dislikeBtn) { handleReaction(dislikeBtn, "{% url 'poll_dislike' %}", 'dislike-count-'); }
+    });
+
+    function handleReaction(btn, url, spanPrefix) {
+      const qn = btn.dataset.qn;
+      if (btn.classList.contains('disabled')) return;
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-CSRFToken': document.cookie.split('=')[1] },
+        body: JSON.stringify({ questionid: qn })
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        if (!data.error) {
+          document.getElementById(`${spanPrefix}${qn}`).textContent = data.count;
+          btn.classList.add('disabled');
+        }
+      });
+    }
+
+    function updatePoll(qn, info) {
+      Object.entries(info.percentages).forEach(([optid, pct])=>{
+        const span = document.getElementById(`pct-${qn}-${optid}`);
+        if (span) span.textContent = `${pct}%`;
+      });
+    }
+
+    function fetchStatus() {
+      fetch("{% url 'poll_status' %}", { headers:{ 'X-CSRFToken': document.cookie.split('=')[1] } })
+        .then(r=>r.json()).then(data=>{
+          Object.entries(data).forEach(([qn, info])=>{
+            document.getElementById(`like-count-${qn}`).textContent = info.likes;
+            document.getElementById(`dislike-count-${qn}`).textContent = info.dislikes;
+            updatePoll(qn, info);
+          });
+        });
+    }
+    setInterval(fetchStatus, 5000);
+    fetchStatus();
+  </script>
+
+</body>
+</html>

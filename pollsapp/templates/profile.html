@@ -1,0 +1,170 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Section</title>
+</head>
+<body>
+    
+</body>
+</html> -->
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Profile</title>
+  <style>
+    .navbar a, .officialsection a { margin-right:1em; }
+    .section { margin-top: 1em; padding: 1em; border: 1px solid #ddd; }
+    table { width:100%; border-collapse:collapse; margin-top:0.5em; }
+    th, td { border:1px solid #ccc; padding:0.5em; text-align:left; }
+    .correct { background:#c8e6c9; }
+    .wrong   { background:#ffcdd2; }
+    .go-back { margin-top:1em; display:inline-block; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=user.email %}">DASHBOARD</a>
+    <a href="{% url 'post'      email=user.email %}">POST</a>
+    <a href="{% url 'chat'      email=user.email %}">CHAT</a>
+    <a href="{% url 'official'  email=user.email %}">OFFICIAL</a>
+    <a href="{% url 'profile'  email=user.email %}">PROFILE</a>
+    <a href="{% url 'logout'    email=user.email %}">LOGOUT</a>
+  </div>
+
+  <h1>My Profile</h1>
+
+  {% for msg in messages %}
+    <p style="color: green;">{{ msg }}</p>
+  {% endfor %}
+
+  <div class="section">
+    <h2>Basic Info</h2>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="update_profile">
+      <p>Name: <input name="name" value="{{ user.name }}"></p>
+      <p>Username: <input name="username" value="{{ user.username }}"></p>
+      <p>Phone: <input name="phonenumber" value="{{ user.phonenumber }}"></p>
+      <p>Email: {{ user.email }}</p>
+      <p>
+        Profile Pic:<br>
+        {% if user.profile_pic and user.profile_pic.url %}
+            <img src="{{ user.profile_pic.url }}" alt="Profile Picture" style="height:150px;"><br>
+        {% else %}
+            <p>No profile picture available.</p>
+        {% endif %}
+        <input type="file" name="profile_pic">
+      </p>
+      <button type="submit">Save Profile</button>
+    </form>
+  </div>
+
+  <div class="section">
+    <h2>Change Password</h2>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="change_password">
+      <p>Current: <input type="password" name="current_password"></p>
+      <p>New:     <input type="password" name="new_password"></p>
+      <p>Confirm: <input type="password" name="confirm_password"></p>
+      <button type="submit">Change Password</button>
+    </form>
+  </div>
+
+  <div class="section">
+    <h2>Polls You Voted In</h2>
+    <ul>
+      {% for vote in votes %}
+        <li>{{ vote.question.pollDescription }}</li>
+      {% empty %}
+        <li>None yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Exams You Created</h2>
+    <table>
+      <tr><th>ID</th><th>Description</th><th>#Qs</th><th>Action</th></tr>
+      {% for ex in created_exams %}
+        <tr>
+          <td>{{ ex.examid }}</td>
+          <td>{{ ex.description|truncatechars:60 }}</td>
+          <td>{{ ex.numberOfQuestions }}</td>
+          <td>
+            <a href="?section=exam&examid={{ ex.examid }}">View Questions</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">None yet.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Exams You Attended</h2>
+    <table>
+      <tr><th>ID</th><th>Score</th><th>Corr</th><th>Wrong</th><th>Action</th></tr>
+      {% for r in attended %}
+        <tr>
+          <td>{{ r.examid }}</td>
+          <td>{{ r.score }}</td>
+          <td>{{ r.correctAnswers }}</td>
+          <td>{{ r.wrongAnswers }}</td>
+          <td>
+            <a href="?section=result&examid={{ r.examid }}">See Results</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">None yet.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  {% if section == 'exam' and exam_detail %}
+    <div class="section">
+      <h2>Exam {{ exam_detail.exam.examid }} Questions</h2>
+      {% for item in exam_detail.qs %}
+        <div style="margin-bottom:1em;">
+          <p><strong>Q{{ item.q.questionnumber }}:</strong> {{ item.q.question }}</p>
+          {% if item.q.image %}
+            <img src="{{ item.q.image.url }}" style="max-height:100px;"><br>
+          {% endif %}
+          {% for o in item.opts %}
+            <p>Option {{ o.optionnumber }}: {{ o.optionDescription }}</p>
+          {% endfor %}
+        </div>
+      {% endfor %}
+      <a class="go-back" href="{% url 'profile' user.email %}">← Back to Profile</a>
+    </div>
+  {% endif %}
+
+  {% if section == 'result' and exam_feedback %}
+    <div class="section">
+      <h2>Results for Exam {{ exam_feedback.result.examid }}</h2>
+      <p>Your score: {{ exam_feedback.result.score }}</p>
+      {% for f in exam_feedback.fb %}
+        <div style="margin-bottom:1em;">
+          <p><strong>{{ f.question }}</strong></p>
+          {% for o in f.options %}
+            <div class="{% if o.is_selected and o.is_correct %}correct{% elif o.is_selected %}wrong{% endif %}">
+              {{ o.text }}
+              {% if o.is_correct %}<strong> ✓</strong>{% endif %}
+              {% if o.score %} — {{ o.score }} pts{% endif %}
+            </div>
+          {% endfor %}
+          <p><em>Explanation:</em> {{ f.explanation }}</p>
+        </div>
+      {% endfor %}
+      <a class="go-back" href="{% url 'profile' user.email %}">← Back to Profile</a>
+    </div>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Attend Examination</title>
+  <style>
+    .navbar a, .officialsection a { margin-right: 1em; }
+    #timer { font-size: 1.2em; color: #c62828; margin: 0.5em 0; }
+    .exampanel { padding: 1em; }
+    .opt { padding: 8px; border: 1px solid #ccc; margin-bottom: 4px; cursor: pointer; }
+    .opt.selected { background-color: #c8e6c9; }
+    .opt img { display: block; max-height: 80px; margin-top: 4px; }
+    button { margin-top: 0.5em; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post'      email=email %}">POST</a>
+    <a href="{% url 'chat'      email=email %}">CHAT</a>
+    <a href="{% url 'official'  email=email %}">OFFICIAL</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
+    <a href="{% url 'logout'    email=email %}">LOGOUT</a>
+  </div>
+  <div id="timer"></div>
+  <div class="officialsection">
+    <a href="{% url 'createexam'     email=email %}">CREATE EXAMINATION</a>
+    <a href="{% url 'attendexam'     email=email %}">ATTEND EXAMINATION</a>
+    <a href="{% url 'liveleaderboard' email=email %}">LIVE LEADERBOARD</a>
+  </div>
+
+  <div class="exampanel">
+    <form id="verifyExam">
+      <input type="number" id="examid" placeholder="Enter the Exam ID" required />
+      <input type="submit" value="Verify" />
+    </form>
+  </div>
+
+  <script>
+    // CSRF helper
+    function getCookie(name) {
+      let v = null;
+      document.cookie.split(';').forEach(c => {
+        c = c.trim();
+        if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length+1));
+      });
+      return v;
+    }
+    const csrftoken = getCookie("csrftoken");
+
+    // SessionStorage state
+    const STATE_KEY = "attendExamState";
+    function persist(s) { sessionStorage.setItem(STATE_KEY, JSON.stringify(s)); }
+    function restore() { const j = sessionStorage.getItem(STATE_KEY); return j?JSON.parse(j):null; }
+    function clearState(){ sessionStorage.removeItem(STATE_KEY); }
+
+    function showMessage(msg) {
+      document.querySelector(".exampanel").innerHTML = `<h3>${msg}</h3>`;
+    }
+
+    document.getElementById("verifyExam").onsubmit = async e => {
+      e.preventDefault();
+      const eid = +document.getElementById("examid").value;
+      const resp = await fetch("/get-exam-meta/", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken":csrftoken
+        },
+        body: JSON.stringify({ examid: eid, email: "{{ email }}" })
+      });
+      if (resp.status===403) return showMessage("You have already attempted this exam.");
+      if (!resp.ok)    return showMessage("Exam not found or ended.");
+
+      const meta = await resp.json();
+      const now   = new Date();
+      const start = new Date(`${meta.startDate}T${meta.startTime}`);
+      const end   = new Date(`${meta.startDate}T${meta.endTime}`);
+
+      if (now > end) return showMessage("This exam has already ended.");
+
+      const state = {
+        examid: eid,
+        questions: null,
+        n: meta.numberOfQuestions,
+        startISO: start.toISOString(),
+        endISO: end.toISOString(),
+        idx: 0,
+        answers: Array(meta.numberOfQuestions).fill(null),
+        startedAt: null
+      };
+      persist(state);
+
+      if (now < start) startCountdown(start, ()=>runExam(state));
+      else runExam(state);
+    };
+
+    function startCountdown(start, callback) {
+      const display = document.getElementById("timer");
+      display.textContent = '';
+      const iv = setInterval(()=>{
+        const diff = start - new Date();
+        if (diff <= 0) { clearInterval(iv); display.textContent = ''; callback(); }
+        else {
+          const m = Math.floor(diff/60000), s = Math.floor((diff%60000)/1000);
+          display.textContent = `Exam starts in ${m}m ${s}s`;
+        }
+      },500);
+    }
+
+    async function runExam(initial) {
+      let s = restore();
+      // Load questions if first time
+      if (!s.questions) {
+        const r = await fetch("/load-exam/", {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "X-CSRFToken":csrftoken
+          },
+          body: JSON.stringify({ examid: s.examid })
+        });
+        const js = await r.json();
+        s.questions = js.examquestions;
+        s.startedAt = new Date().toISOString();
+        persist(s);
+      }
+
+      const qs = s.questions,
+            total = s.n,
+            endTime = new Date(s.endISO),
+            startTs = new Date(s.startedAt).getTime();
+
+      // Timer
+      const display = document.getElementById("timer");
+      const iv = setInterval(()=>{
+        let diff = endTime - new Date();
+        if (diff < 0) diff = 0;
+        const mm = String(Math.floor(diff/60000)).padStart(2,'0');
+        const ss = String(Math.floor((diff%60000)/1000)).padStart(2,'0');
+        display.textContent = `Remaining: ${mm}:${ss}`;
+      },500);
+
+      // Auto-submit
+      const toID = setTimeout(()=>{
+        submitExam(s);
+        clearInterval(iv);
+        showMessage("Time's up!");
+        setTimeout(()=>location.reload(),5000);
+      }, endTime - new Date());
+
+      // Render question
+      function render() {
+        const i = s.idx, q = qs[i];
+        const optsHtml = q.options.map((opt,idx)=> {
+          const num = idx+1;
+          const sel = s.answers[i]===num ? " selected" : "";
+          return `
+            <div class="opt${sel}" data-num="${num}">
+              ${opt.desc}
+              ${opt.imageUrl?`<img src="${opt.imageUrl}">`:``}
+            </div>`;
+        }).join("");
+
+        document.querySelector(".exampanel").innerHTML = `
+          <h4>Question ${i+1} of ${total}</h4>
+          <p>${q.question}</p>
+          <div id="opts">${optsHtml}</div><br>
+          <button id="prev" ${i===0?'disabled':''}>Previous</button>
+          <button id="next">${i+1===total?'Submit':'Next'}</button>
+        `;
+
+        // Option click
+        document.querySelectorAll("#opts .opt").forEach(el=>{
+          el.onclick = ()=>{
+            s.answers[i] = +el.dataset.num;
+            persist(s);
+            render();
+          };
+        });
+
+        // Prev/Next
+        document.getElementById("prev").onclick = ()=>{
+          s.idx--; persist(s); render();
+        };
+        document.getElementById("next").onclick = ()=>{
+          if (i+1===total) submitExam(s);
+          else { s.idx++; persist(s); render(); }
+        };
+      }
+
+      render();
+
+      // Submit
+      async function submitExam(state) {
+        clearTimeout(toID);
+        clearInterval(iv);
+        clearState();
+        const payload = {
+          examid: state.examid,
+          email: "{{ email }}",
+          timeTakenSeconds: Math.floor((Date.now() - startTs)/1000),
+          responses: state.questions.map((q,j)=>({
+            questionnumber: q.questionnumber,
+            selectedOption: state.answers[j]||0
+          }))
+        };
+        await fetch("/submit-exam/", {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "X-CSRFToken":csrftoken
+          },
+          body: JSON.stringify(payload)
+        });
+        showMessage("Exam completed! Thank you.");
+      }
+    }
+
+    // Resume if mid-exam
+    window.addEventListener("DOMContentLoaded",()=>{
+      const st = restore();
+      if (st && st.questions) runExam(st);
+    });
+  </script>
+</body>
+</html>

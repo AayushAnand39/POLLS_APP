@@ -1,0 +1,483 @@
+{% comment %} <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Section</title>
+  <style>
+    .navbar a { margin-right: 1em; }
+    .chatlist, .recentchats, .chatarea { margin: 1em; }
+    .user-suggest { display: flex; align-items: center; cursor: pointer; padding: .5em; }
+    .user-suggest img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 8px; }
+    .searchedUsers { border: 1px solid #ccc; max-height: 200px; overflow-y: auto; margin-top: .5em; }
+    .chatsarea {
+      height: 400px;
+      overflow-y: scroll;
+      padding: 1em;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      display: flex;
+      flex-direction: column; /* oldest at top, newest at bottom */
+    }
+    .chat { margin: .5em 0; padding: .5em; border-radius: 8px; max-width: 60%; }
+    .chat.sent { background: #d1e7dd; align-self: flex-end; }
+    .chat.received { background: #f8d7da; align-self: flex-start; }
+    .textArea { margin-top: 1em; }
+    .textArea textarea { width: 80%; height: 60px; }
+    .textArea button { vertical-align: top; height: 60px; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
+    <a href="{% url 'post' email=email %}">POST</a>
+    <a href="{% url 'chat' email=email %}">CHAT</a>
+    <a href="{% url 'official' email=email %}">OFFICIAL</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
+    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+  </div>
+
+  <div class="chatlist">
+    <input type="text" id="name" placeholder="Search users…" oninput="liveSearch()">
+    <div class="searchedUsers"></div>
+  </div>
+
+  <div class="recentchats">
+    <h2>Recently Contacted</h2>
+    {% for c in recentChatsData %}
+      <div class="user-suggest" data-email="{{ c.email }}" data-name="{{ c.name }}" data-photo="{{ c.photo_url }}">
+        <img src="{{ c.photo_url }}" alt="{{ c.name }}'s avatar">
+        <div>
+          <strong>{{ c.name }}</strong><br>
+          <small>{{ c.message }}</small>
+        </div>
+      </div>
+    {% empty %}
+      <p>No recent chats.</p>
+    {% endfor %}
+  </div>
+
+  <div class="chatarea">
+    <div class="namearea"></div>
+    <div class="chatsarea"></div>
+    <div class="textArea"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const senderEmail = `{{ email }}`;
+      let currentReceiver = null;
+      const renderedKeys = new Set();
+
+      function getCookie(name) {
+        let cookieValue = null;
+        document.cookie.split(';').forEach(c => {
+          c = c.trim();
+          if (c.startsWith(name + '=')) {
+            cookieValue = decodeURIComponent(c.slice(name.length + 1));
+          }
+        });
+        return cookieValue;
+      }
+
+      // Poll every 2s
+      setInterval(fetchChats, 2000);
+
+      // Live search with debounce
+      let searchTimer;
+      document.getElementById('name').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(userSearch, 300);
+      });
+
+      function userSearch() {
+        const prefix = document.getElementById('name').value;
+        fetch('/chat-search/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ name: prefix })
+        })
+        .then(res => res.json())
+        .then(data => {
+          const list = document.querySelector('.searchedUsers');
+          list.innerHTML = data.results.map(u =>
+            `<div class="user-suggest" data-email="${u.email}" data-name="${u.name}" data-photo="${u.photo_url}">` +
+            `<img src="${u.photo_url}" alt="${u.name} avatar">` +
+            `<span>${u.name}</span></div>`
+          ).join('');
+        });
+      }
+
+      // Delegate clicks on user suggestions
+      document.querySelector('.searchedUsers').addEventListener('click', handleUserClick);
+      document.querySelector('.recentchats').addEventListener('click', handleUserClick);
+      function handleUserClick(e) {
+        const node = e.target.closest('.user-suggest');
+        if (!node) return;
+        startChat(node.dataset.email, node.dataset.name, node.dataset.photo);
+      }
+
+      function startChat(email, name, photo) {
+        currentReceiver = email;
+        renderedKeys.clear();
+        document.querySelector('.namearea').innerHTML =
+          `<img src="${photo}" alt="avatar" style="width:40px;height:40px;border-radius:50%;margin-right:8px;vertical-align:middle">` +
+          `<h3 style="display:inline;vertical-align:middle">${name}</h3>`;
+        const area = document.querySelector('.chatsarea');
+        area.innerHTML = '';
+        document.querySelector('.textArea').innerHTML =
+          `<textarea id="message" placeholder="Type your message"></textarea><button id="sendBtn">Send</button>`;
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        fetchChats();
+      }
+
+      function fetchChats() {
+        if (!currentReceiver) return;
+        const area = document.querySelector('.chatsarea');
+        // preserve scroll position
+        const atBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 50;
+
+        fetch('/get-chats/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ senderEmail, receiverEmail: currentReceiver })
+        })
+        .then(res => res.json())
+        .then(data => {
+          data.messages.forEach(msg => {
+            const key = `${msg.senderemail}|${msg.time}|${msg.message}`;
+            if (renderedKeys.has(key)) return;
+            renderedKeys.add(key);
+            const div = document.createElement('div');
+            div.className = 'chat ' + (msg.senderemail === senderEmail ? 'sent' : 'received');
+            div.innerHTML = `<p>${msg.message}</p><small>${msg.time}</small>`;
+            area.appendChild(div);
+          });
+          if (atBottom) area.scrollTop = area.scrollHeight;
+        });
+      }
+
+      function sendMessage() {
+        const message = document.getElementById('message').value.trim();
+        if (!currentReceiver || !message) return;
+        fetch('/send-message/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ senderEmail, receiverEmail: currentReceiver, message })
+        })
+        .then(res => { if (!res.ok) throw new Error('Bad Request'); return res.json(); })
+        .then(() => {
+          document.getElementById('message').value = '';
+          fetchChats();
+        })
+        .catch(console.error);
+      }
+    });
+  </script>
+</body>
+</html> {% endcomment %}
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PollsMedia - Chat</title>
+  <style>
+    /* Reset & base */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1f0037, #000000);
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Navbar */
+    .navbar {
+      flex: 0 0 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      background: rgba(0,0,0,0.85);
+    }
+    .navbar .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    .navbar .nav-links { display: flex; gap: 1rem; }
+    .navbar .nav-links a {
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 0.5rem;
+      font-size: 0.9rem;
+      color: #eee;
+      transition: color 0.3s, background 0.3s;
+    }
+
+    /* Layout grid */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      height: calc(100% - 60px);
+    }
+    @media (max-width: 768px) {
+      .main { grid-template-columns: 1fr; }
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: rgba(20,20,20,0.9);
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+    .sidebar h2 {
+      font-size: 1.1rem;
+      color: #ff4fa3;
+      margin-bottom: 0.5rem;
+    }
+    .sidebar input {
+      width: 100%;
+      padding: 0.5rem;
+      border: none;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #ccc;
+      margin-bottom: 1rem;
+    }
+    .user-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .user-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .user-item:hover { background: rgba(255,255,255,0.05); }
+    .user-item img {
+      width: 40px; height: 40px;
+      border-radius: 50%; object-fit: cover;
+    }
+    .user-item .info { display: flex; flex-direction: column; }
+    .user-item .info strong { font-size: 0.95rem; }
+    .user-item .info small { font-size: 0.8rem; color: #bbb; }
+
+    /* Chat area */
+    .chat-area {
+      display: flex;
+      flex-direction: column;
+      background: rgba(20,20,20,0.8);
+    }
+    .chat-header {
+      flex: 0 0 60px;
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+      border-bottom: 1px solid #333;
+    }
+    .chat-header img {
+      width: 40px; height: 40px;
+      border-radius: 50%; object-fit: cover;
+      border: 2px solid #ff4fa3;
+      margin-right: 0.75rem;
+    }
+    .chat-header h3 { font-size: 1.1rem; color: #ff4fa3; }
+
+    .messages {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .message {
+      max-width: 70%;
+      padding: 0.6rem 0.8rem;
+      border-radius: 8px;
+      position: relative;
+      word-wrap: break-word;
+      font-size: 0.9rem;
+    }
+    .message.sent { align-self: flex-end; background: #2e3b4e; }
+    .message.received { align-self: flex-start; background: #3e2e2e; }
+    .message small {
+      position: absolute;
+      bottom: 4px; right: 8px;
+      font-size: 0.7rem;
+      color: #aaa;
+    }
+
+    .input-area {
+      flex: 0 0 auto;
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.8rem;
+      border-top: 1px solid #333;
+    }
+    .input-area textarea {
+      flex: 1;
+      padding: 0.6rem;
+      border: none;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #eee;
+      resize: none;
+      height: 50px;
+      font-size: 0.9rem;
+    }
+    .input-area button {
+      background: linear-gradient(90deg, #ff4fa3, #8a2be2);
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+      padding: 0 1rem;
+      cursor: pointer;
+      transition: opacity 0.3s;
+    }
+    .input-area button:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="logo">PollsMedia</div>
+    <div class="nav-links">
+      <a href="{% url 'dashboard' email=email %}">Dashboard</a>
+      <a href="{% url 'post' email=email %}">Post</a>
+      <a href="{% url 'chat' email=email %}">Chat</a>
+      <a href="{% url 'official' email=email %}">Official</a>
+      <a href="{% url 'profile' email=email %}">Profile</a>
+      <a href="{% url 'logout' email=email %}">Logout</a>
+    </div>
+  </nav>
+  <div class="main">
+    <aside class="sidebar">
+      <h2>Search Users</h2>
+      <input id="name" type="text" placeholder="Search users…" oninput="liveSearch()">
+      <div class="user-list" id="searchResults"></n      <h2>Recent Chats</h2>
+      <div class="user-list" id="recentList">
+        {% for c in recentChatsData %}
+        <div class="user-item" data-email="{{ c.email }}" data-name="{{ c.name }}" data-photo="{{ c.photo_url }}">
+          <img src="{{ c.photo_url }}" alt="avatar">
+          <div class="info"><strong>{{ c.name }}</strong><small>{{ c.message }}</small></div>
+        </div>
+        {% empty %}<p>No recent chats.</p>{% endfor %}
+      </div>
+    </aside>
+
+    <section class="chat-area">
+      <div class="chat-header" id="header"></div>
+      <div class="messages" id="messages"></div>
+      <div class="input-area" id="inputArea"></div>
+    </section>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const senderEmail = `{{ email }}`;
+      let currentReceiver = null;
+      const rendered = new Set();
+
+      const searchResults = document.getElementById('searchResults');
+      const recentList = document.getElementById('recentList');
+      const header = document.getElementById('header');
+      const messagesEl = document.getElementById('messages');
+      const inputArea = document.getElementById('inputArea');
+
+      function getCSRF() {
+        return document.cookie.split('csrftoken=')[1].split(';')[0];
+      }
+
+      window.liveSearch = () => {
+        fetch('/chat-search/', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},
+          body: JSON.stringify({ name: document.getElementById('name').value })
+        }).then(r=>r.json()).then(data => {
+          searchResults.innerHTML = data.results.map(u =>
+            `<div class="user-item" data-email=\"${u.email}\" data-name=\"${u.name}\" data-photo=\"${u.photo_url}\">`+
+            `<img src=\"${u.photo_url}\" alt=\"avatar\"><div class=\"info\"><strong>${u.name}</strong></div></div>`
+          ).join('');
+        });
+      };
+
+      function bindUserClick(container) {
+        container.addEventListener('click', e => {
+          const item = e.target.closest('.user-item'); if (!item) return;
+          startChat(item.dataset.email, item.dataset.name, item.dataset.photo);
+        });
+      }
+      bindUserClick(searchResults);
+      bindUserClick(recentList);
+
+      function startChat(email, name, photo) {
+        currentReceiver = email; rendered.clear();
+        header.innerHTML = `<img src=\"${photo}\"><h3>${name}</h3>`;
+        messagesEl.innerHTML = '';
+        inputArea.innerHTML = '<textarea id="msgInput" placeholder="Type message..."></textarea><button id="sendBtn">Send</button>';
+        document.getElementById('sendBtn').onclick = sendMessage;
+        fetchChats();
+      }
+
+      function fetchChats() {
+        if (!currentReceiver) return;
+        const atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 50;
+        fetch('/get-chats/',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},
+          body:JSON.stringify({ senderEmail, receiverEmail: currentReceiver })
+        }).then(r=>r.json()).then(data=>{
+          data.messages.forEach(m=>{
+            const key = `${m.senderemail}|${m.time}|${m.message}`;
+            if (rendered.has(key)) return; rendered.add(key);
+            const d = document.createElement('div');
+            d.className = 'message ' + (m.senderemail===senderEmail?'sent':'received');
+            d.innerHTML = `<p>${m.message}</p><small>${m.time}</small>`;
+            messagesEl.append(d);
+          });
+          if (atBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+        });
+      }
+
+      function sendMessage() {
+        const txt = document.getElementById('msgInput').value.trim();
+        if (!txt) return;
+        fetch('/send-message/',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCSRF()},
+          body:JSON.stringify({ senderEmail, receiverEmail: currentReceiver, message: txt })
+        }).then(r=>{ if (r.ok) { document.getElementById('msgInput').value=''; fetchChats(); } });
+      }
+
+      setInterval(fetchChats, 2000);
+    });
+  </script>
+</body>
+</html>
