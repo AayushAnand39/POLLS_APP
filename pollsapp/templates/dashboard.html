@@ -24,7 +24,7 @@
     <a href="{% url 'post' email=email %}">POST</a>
     <a href="{% url 'chat' email=email %}">CHAT</a>
     <a href="{% url 'official' email=email %}">OFFICIAL</a>
-    <a href="/profile">PROFILE</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
     <a href="{% url 'logout' email=email %}">LOGOUT</a>
   </div>
 

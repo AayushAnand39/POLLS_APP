@@ -17,6 +17,8 @@ import imghdr
 import uuid
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.contrib import messages
+from django.contrib.auth.hashers import make_password, check_password
 
 # Create your views here.
 def index(request):
@@ -426,49 +428,6 @@ def sendData(request):
     else:
         return JsonResponse({"error": "error"}, status=400)
     
-# @csrf_exempt
-# def sendExamQuestion(request):
-#     if request.method != "POST":
-#         return JsonResponse({"error": "Invalid request"}, status=400)
-
-#     payload = json.loads(request.body)
-#     examid         = payload.get("examid")
-#     questionnumber = payload.get("questionnumber")
-#     data           = payload.get("formData", {})
-#     pk             = payload.get("pk")  # may be None
-
-#     # If the client already told us which PK to update, use it:
-#     if pk:
-#         try:
-#             eq = models.ExamQuestions.objects.get(pk=pk, examid=examid)
-#         except models.ExamQuestions.DoesNotExist:
-#             return JsonResponse({"error": "Question not found"}, status=404)
-#     else:
-#         # Otherwise try to find an existing one by examid+questionnumber:
-#         eq, created = models.ExamQuestions.objects.get_or_create(
-#             examid=examid,
-#             questionnumber=questionnumber,
-#             defaults={}
-#         )
-
-#     # Now update all fields from incoming data:
-#     eq.question      = data.get("question",      eq.question)
-#     eq.option1       = data.get("option1",       eq.option1)
-#     eq.option2       = data.get("option2",       eq.option2)
-#     eq.option3       = data.get("option3",       eq.option3)
-#     eq.option4       = data.get("option4",       eq.option4)
-#     eq.positiveScore = data.get("positive",      eq.positiveScore)
-#     eq.negativeScore = data.get("negative",      eq.negativeScore)
-#     eq.correctOption = data.get("correct",       eq.correctOption)
-#     eq.save()
-
-#     return JsonResponse({
-#         "message":        "Question saved successfully",
-#         "examid":         examid,
-#         "questionnumber": questionnumber,
-#         "pk":             eq.pk
-#     }, status=200)
-
     
 def attendexam(request, email):
     email = urllib.parse.unquote(email)
@@ -478,109 +437,148 @@ def attendexam(request, email):
     else:
         return render(request,"Login.html")
     
-# def loadExam(request):
-#     if request.method == "POST":
-#         examid = json.loads(request.body).get("examid")
-#         examdetails = models.ExamDetails.objects.get(examid = examid)
-#         examDetails = model_to_dict(examdetails)
-#         examquestiondetails = models.ExamQuestions.objects.filter(examid = examid).order_by("questionnumber")
-#         examquestions = []
-#         for details in examquestiondetails:
-#             examquestions.append({
-#                 "questionnumber" : details.questionnumber,
-#                 "question" : details.question,
-#                 "option1" : details.option1,
-#                 "option2" : details.option2,
-#                 "option3" : details.option3,
-#                 "option4" : details.option4,
-#                 "positive" : details.positiveScore,
-#                 "negative" : details.negativeScore,
-#                 "correctoption" : details.correctOption
-#             })
-#         return JsonResponse({"message" : "Questions loaded successfully", "examquestions" : examquestions, "examid" : examid, "examdetails" : examDetails}, status=200)
-#     else:
-#         return JsonResponse({"error": "error"}, status=400) 
-    
+
+# @csrf_exempt
+# def get_exam_meta(request):
+#     if request.method != "POST":
+#         return JsonResponse({"error":"Invalid request"}, status=400)
+
+#     payload = json.loads(request.body)
+#     examid  = payload.get("examid")
+#     email   = payload.get("email")  # we’ll send this from the client
+
+#     # 1) Does the exam exist?
+#     try:
+#         details = models.ExamDetails.objects.get(examid=examid)
+#     except models.ExamDetails.DoesNotExist:
+#         return JsonResponse({"error":"Not found"}, status=404)
+
+#     # 2) Has this user already taken it?
+#     if models.ExamResults.objects.filter(examid=examid, email=email).exists():
+#         return JsonResponse({"error":"Already attempted"}, status=403)
+
+#     # 3) Otherwise return the metadata
+#     return JsonResponse({
+#         "examid":           details.examid,
+#         "name":             details.name,
+#         "startDate":        details.startDate.isoformat(),
+#         "startTime":        details.startTime.strftime("%H:%M:%S"),
+#         "endTime":          details.endTime.strftime("%H:%M:%S"),
+#         "numberOfQuestions":details.numberOfQuestions
+#     })
+
+# @csrf_exempt
+# def submit_exam(request):
+#     if request.method != "POST":
+#         return JsonResponse({"error": "Invalid"}, status=400)
+
+#     payload = json.loads(request.body)
+#     examid  = payload["examid"]
+#     email   = payload["email"]
+#     resp_list = payload["responses"]
+#     time_taken = payload["timeTakenSeconds"]
+
+#     # Compute score & counts
+#     correct = wrong = total_score = 0
+
+#     for r in resp_list:
+#         qn = r["questionnumber"]
+#         sel = r["selectedOption"]
+#         # Save each response
+#         models.ExamResponse.objects.create(
+#             examid=examid,
+#             email=email,
+#             questionid=qn,
+#             response=sel
+#         )
+#         # Score it
+#         eq = models.ExamQuestions.objects.get(examid=examid, questionnumber=qn)
+#         if sel == eq.correctOption:
+#             correct += 1
+#             total_score += eq.positiveScore
+#         else:
+#             wrong += 1
+#             total_score += eq.negativeScore
+
+#     # Save the aggregate result
+#     models.ExamResults.objects.create(
+#         examid=examid,
+#         email=email,
+#         score=total_score,
+#         timeTaken=time_taken,
+#         correctAnswers=correct,
+#         wrongAnswers=wrong
+#     )
+
+#     return JsonResponse({
+#         "status": "ok",
+#         "score": total_score,
+#         "correct": correct,
+#         "wrong": wrong
+#     })
+
 
 @csrf_exempt
 def get_exam_meta(request):
     if request.method != "POST":
-        return JsonResponse({"error":"Invalid request"}, status=400)
-
+        return JsonResponse({"error":"Invalid"}, status=400)
     payload = json.loads(request.body)
-    examid  = payload.get("examid")
-    email   = payload.get("email")  # we’ll send this from the client
-
-    # 1) Does the exam exist?
+    examid = payload.get("examid")
+    email = payload.get("email")
     try:
-        details = models.ExamDetails.objects.get(examid=examid)
+        d = models.ExamDetails.objects.get(examid=examid)
     except models.ExamDetails.DoesNotExist:
         return JsonResponse({"error":"Not found"}, status=404)
-
-    # 2) Has this user already taken it?
     if models.ExamResults.objects.filter(examid=examid, email=email).exists():
         return JsonResponse({"error":"Already attempted"}, status=403)
-
-    # 3) Otherwise return the metadata
     return JsonResponse({
-        "examid":           details.examid,
-        "name":             details.name,
-        "startDate":        details.startDate.isoformat(),
-        "startTime":        details.startTime.strftime("%H:%M:%S"),
-        "endTime":          details.endTime.strftime("%H:%M:%S"),
-        "numberOfQuestions":details.numberOfQuestions
+        "examid": d.examid,
+        "name": d.name,
+        "startDate": d.startDate.isoformat(),
+        "startTime": d.startTime.strftime("%H:%M:%S"),
+        "endTime": d.endTime.strftime("%H:%M:%S"),
+        "numberOfQuestions": d.numberOfQuestions
     })
-
 
 @csrf_exempt
 def submit_exam(request):
     if request.method != "POST":
-        return JsonResponse({"error": "Invalid"}, status=400)
+        return JsonResponse({"error":"Invalid"}, status=400)
+    p = json.loads(request.body)
+    examid = p["examid"]
+    email = p["email"]
+    time_taken = p["timeTakenSeconds"]
+    responses = p["responses"]
 
-    payload = json.loads(request.body)
-    examid  = payload["examid"]
-    email   = payload["email"]
-    resp_list = payload["responses"]
-    time_taken = payload["timeTakenSeconds"]
+    correct = wrong = total = 0
 
-    # Compute score & counts
-    correct = wrong = total_score = 0
-
-    for r in resp_list:
+    for r in responses:
         qn = r["questionnumber"]
         sel = r["selectedOption"]
-        # Save each response
         models.ExamResponse.objects.create(
-            examid=examid,
-            email=email,
-            questionid=qn,
-            response=sel
+            examid=examid, email=email,
+            questionid=qn, response=sel
         )
-        # Score it
         eq = models.ExamQuestions.objects.get(examid=examid, questionnumber=qn)
         if sel == eq.correctOption:
             correct += 1
-            total_score += eq.positiveScore
+            total += eq.positiveScore
         else:
             wrong += 1
-            total_score += eq.negativeScore
+            total += eq.negativeScore
 
-    # Save the aggregate result
     models.ExamResults.objects.create(
         examid=examid,
         email=email,
-        score=total_score,
+        score=total,
         timeTaken=time_taken,
         correctAnswers=correct,
         wrongAnswers=wrong
     )
 
-    return JsonResponse({
-        "status": "ok",
-        "score": total_score,
-        "correct": correct,
-        "wrong": wrong
-    })
+    return JsonResponse({"status":"ok","score":total,"correct":correct,"wrong":wrong})
+
+
 
 
 def liveleaderboard_page(request, email):
@@ -597,7 +595,7 @@ def liveleaderboard_page(request, email):
 
 @csrf_exempt
 def liveleaderboard_data(request, email):
-    # decode email
+    # Decode email
     email = urllib.parse.unquote(email)
 
     # 1) Validate & cast examid
@@ -614,11 +612,11 @@ def liveleaderboard_data(request, email):
     except models.ExamDetails.DoesNotExist:
         return JsonResponse({"error": f"Exam {examid} not found"}, status=404)
 
-    # 3) Permission check: only the creator may view their own exam’s leaderboard
+    # 3) Permission check: only the creator may view
     if exam.email != email:
         return JsonResponse({"error": "Forbidden"}, status=403)
 
-    # 4) Build the question‐number list for the header
+    # 4) Build question‐number list for header
     qnums = list(
         models.ExamQuestions.objects
         .filter(examid=examid)
@@ -627,9 +625,11 @@ def liveleaderboard_data(request, email):
     )
 
     # 5) Get all results, sorted by score desc, then time asc
-    all_results = models.ExamResults.objects \
-        .filter(examid=examid) \
+    all_results = (
+        models.ExamResults.objects
+        .filter(examid=examid)
         .order_by("-score", "timeTaken")
+    )
 
     # 6) Paginate (10 per page)
     page_num  = int(request.GET.get("page", 1))
@@ -639,17 +639,22 @@ def liveleaderboard_data(request, email):
     # 7) Build each row
     rows = []
     for res in page_obj:
+        # Lookup user for name & picture
         u = models.User.objects.filter(email=res.email).first()
         name = u.name if u else res.email
+        picture = None
+        if u and hasattr(u, "image") and u.image:
+            picture = u.image.url
 
+        # Compute per-question score
         per_q = []
         for qn in qnums:
-            eq   = models.ExamQuestions.objects.filter(
-                      examid=examid, questionnumber=qn
-                   ).first()
+            eq = models.ExamQuestions.objects.filter(
+                examid=examid, questionnumber=qn
+            ).first()
             resp = models.ExamResponse.objects.filter(
-                      examid=examid, email=res.email, questionid=qn
-                   ).first()
+                examid=examid, email=res.email, questionid=qn
+            ).first()
 
             if not eq:
                 per_q.append(0)
@@ -661,10 +666,11 @@ def liveleaderboard_data(request, email):
                 per_q.append(0)
 
         rows.append({
-            "name":       name,
-            "per_q":      per_q,
-            "timeTaken":  res.timeTaken,
-            "totalScore": res.score,
+            "name":        name,
+            "pictureUrl":  picture,
+            "per_q":       per_q,
+            "timeTaken":   res.timeTaken,
+            "totalScore":  res.score,
         })
 
     # 8) Return JSON payload
@@ -815,3 +821,107 @@ def loadExam(request):
         "examdetails":   details,
         "examquestions": qs
     }, status=200)
+
+
+
+def profile(request, email):
+    email = urllib.parse.unquote(email)
+    user = models.User.objects.get(email=email)
+
+    # --- LOGIN VALIDATION: allow only if currently logged in ---
+    if user.logintime != user.logouttime:
+        return render(request, "Login.html")
+
+    # --- PROFILE UPDATE ---
+    if request.method == "POST" and request.POST.get("action") == "update_profile":
+        user.name        = request.POST.get("name", user.name)
+        user.username    = request.POST.get("username", user.username)
+        user.phonenumber = request.POST.get("phonenumber", user.phonenumber)
+        if request.FILES.get("profile_pic"):
+            user.profile_pic = request.FILES["profile_pic"]
+        user.save()
+        messages.success(request, "Profile updated.")
+        return redirect("profile", email=email)
+
+    # --- PASSWORD CHANGE ---
+    if request.method == "POST" and request.POST.get("action") == "change_password":
+        curr = request.POST.get("current_password", "")
+        new  = request.POST.get("new_password", "")
+        conf = request.POST.get("confirm_password", "")
+        if not check_password(curr, user.password):
+            messages.error(request, "Current password is incorrect.")
+        elif new != conf or not new:
+            messages.error(request, "New passwords must match and be nonempty.")
+        else:
+            user.password = make_password(new)
+            user.save()
+            messages.success(request, "Password changed.")
+        return redirect("profile", email=email)
+
+    # --- POLLS VOTED IN (placeholder if tracking not implemented) ---
+    votes = models.PollResponses.objects.none()
+
+    # --- EXAMS CREATED & ATTENDED ---
+    created_exams = models.ExamDetails.objects.filter(email=email)
+    attended      = models.ExamResults.objects.filter(email=email)
+
+    # --- CONDITIONAL DETAIL/RESULT SECTIONS ---
+    section = request.GET.get("section")
+    context = {
+        "user":           user,
+        "votes":          votes,
+        "created_exams":  created_exams,
+        "attended":       attended,
+        "section":        section,
+        "exam_detail":    None,
+        "exam_feedback":  None,
+    }
+
+    if section == "exam":
+        try:
+            examid = int(request.GET.get("examid"))
+            exam = models.ExamDetails.objects.get(examid=examid, email=email)
+            qs = []
+            for q in models.ExamQuestions.objects.filter(examid=examid).order_by("questionnumber"):
+                opts = models.ExamOptions.objects.filter(questionid=q.questionid).order_by("optionnumber")
+                qs.append({"q": q, "opts": opts})
+            context["exam_detail"] = {"exam": exam, "qs": qs}
+        except (TypeError, ValueError, models.ExamDetails.DoesNotExist):
+            messages.error(request, "Exam not found or forbidden.")
+            return redirect("profile", email=email)
+
+    if section == "result":
+        try:
+            examid = int(request.GET.get("examid"))
+            res = models.ExamResults.objects.filter(examid=examid, email=email).order_by('-date')
+            feedback = []
+            for q in models.ExamQuestions.objects.filter(examid=examid).order_by("questionnumber"):
+                opts = models.ExamOptions.objects.filter(questionid=q.questionid).order_by("optionnumber")
+                resp = models.ExamResponse.objects.filter(
+                    examid=examid, email=email, questionid=q.questionnumber
+                ).first()
+                sel = resp.response if resp else None
+
+                ofb = []
+                for o in opts:
+                    is_sel = (o.optionnumber == sel)
+                    is_corr = (o.optionnumber == q.correctOption)
+                    ofb.append({
+                        "text":        o.optionDescription,
+                        "is_selected": is_sel,
+                        "is_correct":  is_corr,
+                        "score":       q.positiveScore if is_sel and is_corr else (q.negativeScore if is_sel else 0)
+                    })
+
+                feedback.append({
+                    "question":    q.question,
+                    "explanation": q.explanation,
+                    "options":     ofb
+                })
+
+            context["exam_feedback"] = {"result": res, "fb": feedback}
+        except (TypeError, ValueError, models.ExamResults.DoesNotExist):
+            messages.error(request, "Result not found.")
+            return redirect("profile", email=email)
+
+    return render(request, "profile.html", context)

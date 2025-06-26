@@ -1,218 +1,3 @@
-{% comment %} <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Examination</title>
-</head>
-<body>
-    <div class="navbar">
-        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
-        <a href="{% url 'post' email=email %}">POST</a>
-        <a href="{% url 'chat' email=email %}">CHAT</a>
-        <a href="{% url 'official' email=email %}">OFFICIAL</a>
-        <a href="/profile">PROFILE</a>
-        <a href="{% url 'logout' email=email %}">LOGOUT</a>
-    </div>
-    <div class="officialsection">
-        <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
-        <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
-        <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
-    </div>
-    <div class="questions">
-        <form action="{% url 'createexam' email=email %}" method="post" onsubmit="return createExamQuestions(event)">
-            <!-- {% csrf_token %} -->
-            <input type="text" name="name" id="name" placeholder="Enter the name of the exam creator"><br>
-            <input type="email" name="email" id="email" placeholder="Enter the email of the exam creator"><br>
-            <input type="text" name="institution" id="institution" placeholder="Enter the institution you are affiliated with"><br>
-            <input type="text" name="phonenumber" id="phonenumber" placeholder="Enter your phone number"><br>
-            <input type="number" name="number" id="number" placeholder="Enter the number of questions"><br>
-            <input type="date" name="date" id="date" placeholder="Enter the starting date"><br>
-            <input type="time" name="starttime" id="starttime" placeholder="Enter the starting time of the examination"><br>
-            <input type="time" name="endtime" id="endtime" placeholder="Enter the ending time of the examination"><br>
-            <input type="text" name="description" id="description" placeholder="Enter the description of this examination"><br>
-            <input type="submit" value="Create exam">
-        </form>
-    </div>
-</body>
-<script>
-  // CSRF helper (unchanged)
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== "") {
-            document.cookie.split(";").forEach(c => {
-                c = c.trim();
-                if (c.startsWith(name + "=")) {
-                cookieValue = decodeURIComponent(c.slice(name.length + 1));
-                }
-            });
-        }
-        return cookieValue;
-    }
-
-  // In‑memory state, plus metadata
-    let examid         = null;
-    let questionCount  = 0;
-    let currentIndex   = 1;
-    let metadata       = {};     // { name, email, institution, phonenumber, number, date, starttime, endtime, description }
-    const questionsCache = {};   // questionsCache[q] = {...}
-    const questionPK     = {};   // questionPK[q] = db pk
-
-    function persistState() {
-        sessionStorage.setItem("metadata",      JSON.stringify(metadata));
-        sessionStorage.setItem("examid",        examid);
-        sessionStorage.setItem("questionCount", questionCount);
-        sessionStorage.setItem("currentIndex",  currentIndex);
-        sessionStorage.setItem("questionsCache",JSON.stringify(questionsCache));
-        sessionStorage.setItem("questionPK",    JSON.stringify(questionPK));
-    }
-
-    function restoreState() {
-        const m = sessionStorage.getItem("metadata");
-        if (!m) return false;
-        metadata       = JSON.parse(m);
-        examid         = sessionStorage.getItem("examid");
-        questionCount  = parseInt(sessionStorage.getItem("questionCount"), 10);
-        currentIndex   = parseInt(sessionStorage.getItem("currentIndex"), 10);
-        Object.assign(questionsCache, JSON.parse(sessionStorage.getItem("questionsCache")  || "{}"));
-        Object.assign(questionPK,     JSON.parse(sessionStorage.getItem("questionPK")      || "{}"));
-        return true;
-    }
-
-    // initial metadata form submit
-    async function createExamQuestions(e) {
-        e.preventDefault();
-        metadata = Object.fromEntries(new FormData(e.target).entries());
-        questionCount = parseInt(metadata.number, 10);
-
-        // send metadata
-        const resp = await fetch("/send-data/", {
-            method: "POST",
-            headers: {
-                "Content-Type":"application/json",
-                "X-CSRFToken":getCookie("csrftoken")
-            },
-            body: JSON.stringify({ formData: metadata })
-        });
-        const js = await resp.json();
-        examid = js.examid;
-
-        // init empty question slots
-        for (let i = 1; i <= questionCount; i++) {
-            questionsCache[i] = {
-                question: "", option1: "", option2: "",
-                option3: "", option4: "",
-                positive: "", negative: "", correct: ""
-            };
-        }
-
-        persistState();
-        renderQuestion(1);
-    }
-
-    // render question #q
-    function renderQuestion(q) {
-        currentIndex = q;
-        persistState();
-
-        const slot = questionsCache[q] || {};
-        const cont = document.querySelector(".questions");
-        cont.innerHTML = `
-        <h4>Exam ID: ${examid}</h4>
-        <h4>Question ${q} of ${questionCount}</h4>
-        <form id="qform">
-            <input type="text"   name="question"  value="${slot.question}" placeholder="Question"><br>
-            <input type="text"   name="option1"   value="${slot.option1}"  placeholder="Option 1"><br>
-            <input type="text"   name="option2"   value="${slot.option2}"  placeholder="Option 2"><br>
-            <input type="text"   name="option3"   value="${slot.option3}"  placeholder="Option 3"><br>
-            <input type="text"   name="option4"   value="${slot.option4}"  placeholder="Option 4"><br>
-            <input type="number" name="positive"  value="${slot.positive}" placeholder="Score +ve"><br>
-            <input type="number" name="negative"  value="${slot.negative}" placeholder="Score –ve"><br>
-            <input type="number" name="correct"   value="${slot.correct}"  placeholder="Correct option (1–4)"><br>
-            <button type="submit">Save</button>
-        </form>
-        <button id="prevBtn" ${q===1 ? "disabled" : ""}>Previous</button>
-        ${
-            q < questionCount
-            ? `<button id="nextBtn">Next</button>`
-            : `
-            <button id="verifyBtn">Verify Details</button>
-            <button id="submitBtn">Submit Exam</button>
-            `
-        }
-        `;
-
-        // handlers
-        document.getElementById("qform").onsubmit = e => sendQuestion(e, q);
-        if (q > 1) document.getElementById("prevBtn").onclick = () => renderQuestion(q-1);
-        if (q < questionCount) document.getElementById("nextBtn").onclick = () => renderQuestion(q+1);
-        else {
-            // On last question: Verify and Submit
-            document.getElementById("verifyBtn").onclick = () => {
-                // clear question state, keep metadata
-                sessionStorage.removeItem("examid");
-                sessionStorage.removeItem("questionCount");
-                sessionStorage.removeItem("currentIndex");
-                sessionStorage.removeItem("questionsCache");
-                sessionStorage.removeItem("questionPK");
-                // reload to show metadata form prefilled
-                window.location.reload();
-            };
-            document.getElementById("submitBtn").onclick = () => {
-                // final submit: clear all and go to dashboard
-                sessionStorage.clear();
-                window.location.href = "{% url 'dashboard' email=email %}";
-            };
-        }
-    }
-
-    // save or update a question
-    async function sendQuestion(e, qnum) {
-        e.preventDefault();
-        const dataObj = Object.fromEntries(new FormData(e.target).entries());
-        questionsCache[qnum] = dataObj;
-        persistState();
-
-        const payload = { examid, questionnumber: qnum, formData: dataObj };
-        if (questionPK[qnum]) payload.pk = questionPK[qnum];
-
-        const resp = await fetch("/send-exam-question/", {
-            method: "POST",
-            headers: {
-                "Content-Type":"application/json",
-                "X-CSRFToken":getCookie("csrftoken")
-            },
-            body: JSON.stringify(payload)
-        });
-        const js = await resp.json();
-        if (js.pk) {
-            questionPK[qnum] = js.pk;
-            persistState();
-        }
-        alert(`Question ${qnum} saved!`);
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-        if (restoreState()) renderQuestion(currentIndex);
-        else {
-        // first‑time: metadata form
-            document.querySelector("form").onsubmit = createExamQuestions;
-            // if you had saved metadata previously, prefill it:
-            const saved = sessionStorage.getItem("metadata");
-            if (saved) {
-                const m = JSON.parse(saved);
-                Object.entries(m).forEach(([k,v])=>{
-                const inp = document.getElementById(k);
-                if (inp) inp.value = v;
-                });
-            }
-        }
-    });
-</script>
-</html>  {% endcomment %}
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -220,106 +5,151 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Create Examination</title>
   <style>
-    .navbar a { margin-right:1em; }
-    .officialsection a { margin-right:1em; display:inline-block; margin-top:1em; }
-    .option-group { border:1px solid #ccc; padding:8px; margin-bottom:8px; border-radius:4px; }
-    .option-group img { max-height:100px; display:block; margin:4px 0; }
-    label { font-weight:bold; display:block; margin-top:8px; }
-    button { margin-top:8px; }
+    .navbar a { margin-right: 1em; }
+    .officialsection a { margin-right: 1em; display: inline-block; margin-top: 1em; }
+    .option-group { border: 1px solid #ccc; padding: 8px; margin-bottom: 8px; border-radius: 4px; }
+    .option-group img { max-height: 100px; display: block; margin: 4px 0; }
+    label { font-weight: bold; display: block; margin-top: 8px; }
+    button { margin-top: 8px; }
   </style>
 </head>
 <body>
   <div class="navbar">
     <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
-    <a href="{% url 'post' email=email %}">POST</a>
-    <a href="{% url 'chat' email=email %}">CHAT</a>
-    <a href="{% url 'official' email=email %}">OFFICIAL</a>
-    <a href="/profile">PROFILE</a>
-    <a href="{% url 'logout' email=email %}">LOGOUT</a>
+    <a href="{% url 'post'      email=email %}">POST</a>
+    <a href="{% url 'chat'      email=email %}">CHAT</a>
+    <a href="{% url 'official'  email=email %}">OFFICIAL</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
+    <a href="{% url 'logout'    email=email %}">LOGOUT</a>
   </div>
   <div class="officialsection">
-    <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
-    <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
+    <a href="{% url 'createexam'     email=email %}">CREATE EXAMINATION</a>
+    <a href="{% url 'attendexam'     email=email %}">ATTEND EXAMINATION</a>
     <a href="{% url 'liveleaderboard' email=email %}">LIVE LEADERBOARD</a>
   </div>
 
   <div class="questions">
+    <!-- Step 1: metadata form -->
     <form id="metaForm" onsubmit="return createExamQuestions(event)">
       <label>Creator Name</label>
       <input type="text" name="name" id="name" required><br>
+
       <label>Email</label>
       <input type="email" name="email" id="email" required><br>
+
       <label>Institution</label>
       <input type="text" name="institution" id="institution" required><br>
+
       <label>Phone Number</label>
       <input type="text" name="phonenumber" id="phonenumber" required><br>
+
       <label>Number of Questions</label>
       <input type="number" name="number" id="number" required><br>
+
       <label>Start Date</label>
       <input type="date" name="date" id="date" required><br>
+
       <label>Start Time</label>
       <input type="time" name="starttime" id="starttime" required><br>
+
       <label>End Time</label>
       <input type="time" name="endtime" id="endtime" required><br>
+
       <label>Description</label>
       <textarea name="description" id="description" rows="2"></textarea><br>
+
       <button type="submit">Create Exam</button>
     </form>
   </div>
 
   <script>
-    function getCookie(n){let v=null;document.cookie.split(';').forEach(c=>{c=c.trim();if(c.startsWith(n+'='))v=decodeURIComponent(c.slice(n.length+1));});return v;}
-
-    let examid=null, questionCount=0, currentIndex=1, metadata={}, questionsCache={}, questionPK={};
-
-    function persistState(){
-      sessionStorage.setItem('metadata',JSON.stringify(metadata));
-      sessionStorage.setItem('examid',examid);
-      sessionStorage.setItem('questionCount',questionCount);
-      sessionStorage.setItem('currentIndex',currentIndex);
-      sessionStorage.setItem('questionsCache',JSON.stringify(questionsCache));
-      sessionStorage.setItem('questionPK',JSON.stringify(questionPK));
+    // CSRF helper
+    function getCookie(name) {
+      let v = null;
+      document.cookie.split(';').forEach(c => {
+        c = c.trim();
+        if (c.startsWith(name + '=')) {
+          v = decodeURIComponent(c.slice(name.length + 1));
+        }
+      });
+      return v;
     }
-    function restoreState(){
-      const m=sessionStorage.getItem('metadata'); if(!m) return false;
-      metadata=JSON.parse(m);
-      examid=sessionStorage.getItem('examid');
-      questionCount=+sessionStorage.getItem('questionCount');
-      currentIndex=+sessionStorage.getItem('currentIndex');
-      questionsCache=JSON.parse(sessionStorage.getItem('questionsCache')||'{}');
-      questionPK=JSON.parse(sessionStorage.getItem('questionPK')||'{}');
+
+    // State
+    let examid = null,
+        questionCount = 0,
+        currentIndex = 1,
+        metadata = {},
+        questionsCache = {},   // {1: {...},2: {...},...}
+        questionPK = {};
+
+    function persistState() {
+      sessionStorage.setItem('metadata', JSON.stringify(metadata));
+      sessionStorage.setItem('examid', examid);
+      sessionStorage.setItem('questionCount', questionCount);
+      sessionStorage.setItem('currentIndex', currentIndex);
+      sessionStorage.setItem('questionsCache', JSON.stringify(questionsCache));
+      sessionStorage.setItem('questionPK', JSON.stringify(questionPK));
+    }
+
+    function restoreState() {
+      const m = sessionStorage.getItem('metadata');
+      if (!m) return false;
+      metadata = JSON.parse(m);
+      examid = sessionStorage.getItem('examid');
+      questionCount = +sessionStorage.getItem('questionCount');
+      currentIndex = +sessionStorage.getItem('currentIndex');
+      questionsCache = JSON.parse(sessionStorage.getItem('questionsCache') || '{}');
+      questionPK = JSON.parse(sessionStorage.getItem('questionPK') || '{}');
       return true;
     }
 
-    async function createExamQuestions(e){
+    // Step 1: send metadata & initialize questionsCache
+    async function createExamQuestions(e) {
       e.preventDefault();
-      metadata=Object.fromEntries(new FormData(e.target).entries());
-      questionCount=+metadata.number;
-      const resp=await fetch('/send-data/',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
-        body:JSON.stringify({formData:metadata})
+      metadata = Object.fromEntries(new FormData(e.target).entries());
+      questionCount = +metadata.number;
+
+      const resp = await fetch('/send-data/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ formData: metadata })
       });
-      const js=await resp.json();
-      examid=js.examid;
-      for(let i=1;i<=questionCount;i++){
-        questionsCache[i]={question:'',questionImage:null,
-                           explanation:'',positiveScore:0,negativeScore:0,
-                           correctOption:null,options:[]};
+      const js = await resp.json();
+      examid = js.examid;
+
+      // initialize each question slot
+      for (let i = 1; i <= questionCount; i++) {
+        questionsCache[i] = {
+          question: '',
+          questionImage: null,
+          explanation: '',
+          positiveScore: 0,
+          negativeScore: 0,
+          correctOption: null,
+          options: []     // array of { id, desc, image }
+        };
       }
       persistState();
       renderQuestion(1);
     }
 
-    function renderQuestion(q){
-      currentIndex=q; persistState();
-      const slot=questionsCache[q]??questionsCache[String(q)]??
-                 {question:'',questionImage:null,
-                  explanation:'',positiveScore:0,negativeScore:0,
-                  correctOption:null,options:[]};
-      const opts=slot.options=Array.isArray(slot.options)?slot.options:[];
+    // Render question #q
+    function renderQuestion(q) {
+      currentIndex = q;
+      persistState();
 
-      document.querySelector('.questions').innerHTML=`
+      const slot = questionsCache[q] ?? questionsCache[String(q)] ?? {
+        question: '', questionImage: null,
+        explanation: '', positiveScore: 0, negativeScore: 0,
+        correctOption: null, options: []
+      };
+      const opts = slot.options = Array.isArray(slot.options) ? slot.options : [];
+
+      document.querySelector('.questions').innerHTML = `
         <h4>Exam ${examid} — Q${q}/${questionCount}</h4>
         <form id="qform">
           <label>Question Text</label>
@@ -339,7 +169,8 @@
           <label>Negative Score</label>
           <input type="number" name="negativeScore" value="${slot.negativeScore}" required><br>
 
-          <div><label>Options</label>
+          <div>
+            <label>Options</label>
             <button type="button" id="addOptionBtn">+ Add Option</button>
           </div>
           <div id="optionsContainer"></div><br>
@@ -353,61 +184,95 @@
         </form>
 
         <button id="prevBtn" ${q===1?'disabled':''}>Previous</button>
-        ${q<questionCount?'<button id="nextBtn">Next</button>':'<button id="finishBtn">Finish</button>'}
+        ${q<questionCount
+          ? `<button id="nextBtn">Next</button>`
+          : `<button id="finishBtn">Finish Exam</button>`
+        }
       `;
 
-      const form=document.getElementById('qform');
-      form.querySelector('[name="question"]').oninput=e=>{slot.question=e.target.value;persistState()};
-      form.querySelector('[name="explanation"]').oninput=e=>{slot.explanation=e.target.value;persistState()};
-      form.querySelector('[name="positiveScore"]').oninput=e=>{slot.positiveScore=+e.target.value;persistState()};
-      form.querySelector('[name="negativeScore"]').oninput=e=>{slot.negativeScore=+e.target.value;persistState()};
-
-      document.getElementById('qimg').onchange=e=>{
-        const r=new FileReader();
-        r.onload=ev=>{
-          slot.questionImage=ev.target.result;
-          const img=document.getElementById('qimgPreview');
-          img.src=ev.target.result;img.style.display='block';
-          persistState();
-        };
-        r.readAsDataURL(e.target.files[0]);
+      // Bind question-level inputs
+      const form = document.getElementById('qform');
+      form.querySelector('[name="question"]').oninput = e => {
+        slot.question = e.target.value; persistState();
+      };
+      form.querySelector('[name="explanation"]').oninput = e => {
+        slot.explanation = e.target.value; persistState();
+      };
+      form.querySelector('[name="positiveScore"]').oninput = e => {
+        slot.positiveScore = +e.target.value; persistState();
+      };
+      form.querySelector('[name="negativeScore"]').oninput = e => {
+        slot.negativeScore = +e.target.value; persistState();
       };
 
-      const optsDiv=document.getElementById('optionsContainer');
-      opts.forEach((opt,i)=>addOptionField(optsDiv,i,opt));
-      function rebuildCorrect(){
-        const sel=document.getElementById('correctSelect');
-        sel.innerHTML='<option value="">-- select --</option>';
-        opts.forEach((_,i)=>{
-          const val=i+1;
-          const o=document.createElement('option');
-          o.value=val; o.text=`Option ${val}`;
-          if(slot.correctOption===val) o.selected=true;
+      // Question-image preview
+      document.getElementById('qimg').onchange = e => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          slot.questionImage = ev.target.result;
+          const img = document.getElementById('qimgPreview');
+          img.src = ev.target.result;
+          img.style.display = 'block';
+          persistState();
+        };
+        reader.readAsDataURL(e.target.files[0]);
+      };
+
+      // Render existing options
+      const optsDiv = document.getElementById('optionsContainer');
+      opts.forEach((opt,i) => addOptionField(optsDiv, i, opt));
+
+      // Rebuild correct-option dropdown
+      function rebuildCorrect() {
+        const sel = document.getElementById('correctSelect');
+        sel.innerHTML = `<option value="">-- select --</option>`;
+        opts.forEach((_,i) => {
+          const val = i+1;
+          const o = document.createElement('option');
+          o.value = val;
+          o.text = `Option ${val}`;
+          if (slot.correctOption === val) o.selected = true;
           sel.append(o);
         });
       }
       rebuildCorrect();
 
-      document.getElementById('addOptionBtn').onclick=()=>{
-        opts.push({id:null,desc:'',image:null});
-        addOptionField(optsDiv,opts.length-1,opts[opts.length-1]);
-        rebuildCorrect();persistState();
-      };
-      document.getElementById('correctSelect').onchange=e=>{
-        slot.correctOption=e.target.value===''?null:+e.target.value;
+      // Add new option
+      document.getElementById('addOptionBtn').onclick = () => {
+        opts.push({ id: null, desc: '', image: null });
+        addOptionField(optsDiv, opts.length - 1, opts[opts.length - 1]);
+        rebuildCorrect();
         persistState();
       };
 
-      form.onsubmit=e=>sendQuestion(e,q);
-      if(q>1)document.getElementById('prevBtn').onclick=()=>renderQuestion(q-1);
-      if(q<questionCount)document.getElementById('nextBtn').onclick=()=>renderQuestion(q+1);
-      else document.getElementById('finishBtn').onclick=()=>window.location.href="{% url 'dashboard' email=email %}";
+      // Correct-option change
+      document.getElementById('correctSelect').onchange = e => {
+        slot.correctOption = e.target.value === '' ? null : +e.target.value;
+        persistState();
+      };
+
+      // Form submit
+      form.onsubmit = e => sendQuestion(e, q);
+
+      // Navigation
+      if (q > 1) document.getElementById('prevBtn')
+                             .onclick = () => renderQuestion(q - 1);
+      if (q < questionCount) document.getElementById('nextBtn')
+                             .onclick = () => renderQuestion(q + 1);
+      else {
+        // **Finish Exam**: clear state & redirect
+        document.getElementById('finishBtn').onclick = () => {
+          sessionStorage.clear();
+          window.location.href = "{% url 'dashboard' email=email %}";
+        };
+      }
     }
 
-    function addOptionField(container,idx,opt){
-      const div=document.createElement('div');
-      div.className='option-group';
-      div.innerHTML=`
+    // Create one option block
+    function addOptionField(container, idx, opt) {
+      const div = document.createElement('div');
+      div.className = 'option-group';
+      div.innerHTML = `
         <input type="hidden" name="opt-id-${idx}" value="${opt.id||''}">
         <label>Option ${idx+1} Text</label>
         <input type="text" name="opt-desc-${idx}" value="${opt.desc}" required><br>
@@ -420,38 +285,52 @@
       `;
       container.appendChild(div);
 
-      div.querySelector(`[name="opt-desc-${idx}"]`).oninput=e=>{
-        opt.desc=e.target.value;persistState();
+      div.querySelector(`[name="opt-desc-${idx}"]`).oninput = e => {
+        opt.desc = e.target.value; persistState();
       };
-      div.querySelector(`[name="opt-img-${idx}"]`).onchange=e=>{
-        const r=new FileReader();
-        r.onload=ev=>{
-          opt.image=ev.target.result;
-          const img=document.getElementById(`optImgPreview-${idx}`);
-          img.src=ev.target.result;img.style.display='block';
+      div.querySelector(`[name="opt-img-${idx}"]`).onchange = e => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          opt.image = ev.target.result;
+          const img = document.getElementById(`optImgPreview-${idx}`);
+          img.src = ev.target.result; img.style.display = 'block';
           persistState();
         };
-        r.readAsDataURL(e.target.files[0]);
+        reader.readAsDataURL(e.target.files[0]);
       };
     }
 
-    async function sendQuestion(e,q){
+    // Send or update question
+    async function sendQuestion(e, qnum) {
       e.preventDefault();
-      const payload={examid,questionnumber:q,formData:questionsCache[q]};
-      if(questionPK[q])payload.pk=questionPK[q];
-      const resp=await fetch('/send-exam-question/',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
-        body:JSON.stringify(payload)
+      const payload = {
+        examid,
+        questionnumber: qnum,
+        formData: questionsCache[qnum]
+      };
+      if (questionPK[qnum]) payload.pk = questionPK[qnum];
+
+      const resp = await fetch('/send-exam-question/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(payload)
       });
-      const js=await resp.json();
-      questionPK[q]=js.pk;persistState();
-      alert(`Saved Q${q}`);
+      const js = await resp.json();
+      questionPK[qnum] = js.pk;
+      persistState();
+      alert(`Question ${qnum} saved!`);
     }
 
-    document.addEventListener('DOMContentLoaded',()=>{
-      if(restoreState())renderQuestion(currentIndex);
-      else document.getElementById('metaForm').onsubmit=createExamQuestions;
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (restoreState()) {
+        renderQuestion(currentIndex);
+      } else {
+        document.getElementById('metaForm').onsubmit = createExamQuestions;
+      }
     });
   </script>
 </body>

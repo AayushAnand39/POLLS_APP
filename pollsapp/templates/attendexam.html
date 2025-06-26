@@ -1,21 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Attend Examination</title>
   <style>
-    .opt.selected {
-      background-color: #c8e6c9;
-    }
-    .navbar a, .officialsection a {
-      margin-right: 1em;
-    }
-    #timer {
-      font-size: 1.2em;
-      margin-bottom: 0.5em;
-      color: #c62828;
-    }
+    .navbar a, .officialsection a { margin-right: 1em; }
+    #timer { font-size: 1.2em; color: #c62828; margin: 0.5em 0; }
+    .exampanel { padding: 1em; }
+    .opt { padding: 8px; border: 1px solid #ccc; margin-bottom: 4px; cursor: pointer; }
+    .opt.selected { background-color: #c8e6c9; }
+    .opt img { display: block; max-height: 80px; margin-top: 4px; }
+    button { margin-top: 0.5em; }
   </style>
 </head>
 <body>
@@ -24,25 +20,19 @@
     <a href="{% url 'post'      email=email %}">POST</a>
     <a href="{% url 'chat'      email=email %}">CHAT</a>
     <a href="{% url 'official'  email=email %}">OFFICIAL</a>
-    <a href="/profile">PROFILE</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
     <a href="{% url 'logout'    email=email %}">LOGOUT</a>
   </div>
-
+  <div id="timer"></div>
   <div class="officialsection">
-    <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
-    <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
-    <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
+    <a href="{% url 'createexam'     email=email %}">CREATE EXAMINATION</a>
+    <a href="{% url 'attendexam'     email=email %}">ATTEND EXAMINATION</a>
+    <a href="{% url 'liveleaderboard' email=email %}">LIVE LEADERBOARD</a>
   </div>
 
   <div class="exampanel">
     <form id="verifyExam">
-      <input
-        type="number"
-        name="examid"
-        id="examid"
-        placeholder="Enter the examination id"
-        required
-      />
+      <input type="number" id="examid" placeholder="Enter the Exam ID" required />
       <input type="submit" value="Verify" />
     </form>
   </div>
@@ -51,194 +41,169 @@
     // CSRF helper
     function getCookie(name) {
       let v = null;
-      if (document.cookie && document.cookie !== "") {
-        document.cookie.split(";").forEach(c => {
-          c = c.trim();
-          if (c.startsWith(name + "=")) {
-            v = decodeURIComponent(c.slice(name.length + 1));
-          }
-        });
-      }
+      document.cookie.split(';').forEach(c => {
+        c = c.trim();
+        if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length+1));
+      });
       return v;
     }
-    const csrftoken = getCookie("csrftoken") || "";
+    const csrftoken = getCookie("csrftoken");
 
-    // sessionStorage key
+    // SessionStorage state
     const STATE_KEY = "attendExamState";
-    function persistState(s) { sessionStorage.setItem(STATE_KEY, JSON.stringify(s)); }
-    function restoreState() { const j = sessionStorage.getItem(STATE_KEY); return j?JSON.parse(j):null; }
-    function clearState() { sessionStorage.removeItem(STATE_KEY); }
+    function persist(s) { sessionStorage.setItem(STATE_KEY, JSON.stringify(s)); }
+    function restore() { const j = sessionStorage.getItem(STATE_KEY); return j?JSON.parse(j):null; }
+    function clearState(){ sessionStorage.removeItem(STATE_KEY); }
 
-    // show message in panel
     function showMessage(msg) {
       document.querySelector(".exampanel").innerHTML = `<h3>${msg}</h3>`;
     }
 
-    // countdown until start
-    function showCountdown(startDate, onStart) {
-      const panel = document.querySelector(".exampanel");
-      panel.innerHTML = `<h3>Exam starts in <span id="countdown"></span></h3>`;
-      const iv = setInterval(() => {
-        const diff = startDate - new Date();
-        if (diff <= 0) {
-          clearInterval(iv);
-          onStart();
-        } else {
-          const m = Math.floor(diff/60000), s = Math.floor((diff%60000)/1000);
-          document.getElementById("countdown").textContent = `${m}m ${s}s`;
-        }
-      }, 500);
-    }
-
-    // handle verifying exam ID
-    document.getElementById("verifyExam").addEventListener("submit", async e => {
-    e.preventDefault();
-    const examid = +document.getElementById("examid").value;
-
-    const metaResp = await fetch("/get-exam-meta/", {
-        method: "POST",
-        headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrftoken
+    document.getElementById("verifyExam").onsubmit = async e => {
+      e.preventDefault();
+      const eid = +document.getElementById("examid").value;
+      const resp = await fetch("/get-exam-meta/", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken":csrftoken
         },
-        body: JSON.stringify({
-        examid,
-        email: "{{ email }}"       // pass the template-injected user email
-        })
-    });
+        body: JSON.stringify({ examid: eid, email: "{{ email }}" })
+      });
+      if (resp.status===403) return showMessage("You have already attempted this exam.");
+      if (!resp.ok)    return showMessage("Exam not found or ended.");
 
-    if (metaResp.status === 403) {
-        // already attempted
-        return showMessage("You have already attempted this exam.");
-    }
-    if (!metaResp.ok) {
-        return showMessage("Exam not found or already ended.");
-    }
+      const meta = await resp.json();
+      const now   = new Date();
+      const start = new Date(`${meta.startDate}T${meta.startTime}`);
+      const end   = new Date(`${meta.startDate}T${meta.endTime}`);
 
-    const meta = await metaResp.json();
-      const now       = new Date();
-      const startDate = new Date(`${meta.startDate}T${meta.startTime}`);
-      const endDate   = new Date(`${meta.startDate}T${meta.endTime}`);
+      if (now > end) return showMessage("This exam has already ended.");
 
-      if (now > endDate) {
-        return showMessage("This exam has already ended.");
-      }
-
-      // initialize state
       const state = {
-        examid,
-        questions:    null,
-        numberOfQs:   meta.numberOfQuestions,
-        startTimeISO: startDate.toISOString(),
-        endTimeISO:   endDate.toISOString(),
-        currentIndex: 0,
-        answers:      Array(meta.numberOfQuestions).fill(null),
-        startedAtISO: null
+        examid: eid,
+        questions: null,
+        n: meta.numberOfQuestions,
+        startISO: start.toISOString(),
+        endISO: end.toISOString(),
+        idx: 0,
+        answers: Array(meta.numberOfQuestions).fill(null),
+        startedAt: null
       };
-      persistState(state);
+      persist(state);
 
-      if (now < startDate) {
-        return showCountdown(startDate, () => startExam(state));
-      }
-      startExam(state);
-    });
+      if (now < start) startCountdown(start, ()=>runExam(state));
+      else runExam(state);
+    };
 
-    // main exam runner
-    async function startExam(initialState) {
-      let state = restoreState();
+    function startCountdown(start, callback) {
+      const display = document.getElementById("timer");
+      display.textContent = '';
+      const iv = setInterval(()=>{
+        const diff = start - new Date();
+        if (diff <= 0) { clearInterval(iv); display.textContent = ''; callback(); }
+        else {
+          const m = Math.floor(diff/60000), s = Math.floor((diff%60000)/1000);
+          display.textContent = `Exam starts in ${m}m ${s}s`;
+        }
+      },500);
+    }
 
-      // first time: load questions + mark startedAt
-      if (!state.questions) {
-        const resp = await fetch("/load-exam/", {
+    async function runExam(initial) {
+      let s = restore();
+      // Load questions if first time
+      if (!s.questions) {
+        const r = await fetch("/load-exam/", {
           method:"POST",
           headers:{
             "Content-Type":"application/json",
             "X-CSRFToken":csrftoken
           },
-          body: JSON.stringify({ examid: initialState.examid })
+          body: JSON.stringify({ examid: s.examid })
         });
-        const js = await resp.json();
-        state.questions    = js.examquestions;
-        state.startedAtISO = new Date().toISOString();
-        persistState(state);
+        const js = await r.json();
+        s.questions = js.examquestions;
+        s.startedAt = new Date().toISOString();
+        persist(s);
       }
 
-      const qs     = state.questions;
-      const numQ   = state.numberOfQs;
-      const endD   = new Date(state.endTimeISO);
-      const startTs= new Date(state.startedAtISO).getTime();
+      const qs = s.questions,
+            total = s.n,
+            endTime = new Date(s.endISO),
+            startTs = new Date(s.startedAt).getTime();
 
-      // Remaining-time updater
-      let timerInterval = setInterval(() => {
-        const diff = endD - new Date();
+      // Timer
+      const display = document.getElementById("timer");
+      const iv = setInterval(()=>{
+        let diff = endTime - new Date();
         if (diff < 0) diff = 0;
-        const m = Math.floor(diff/60000).toString().padStart(2,"0");
-        const s = Math.floor((diff%60000)/1000).toString().padStart(2,"0");
-        document.getElementById("timer").textContent = `Remaining: ${m}:${s}`;
-      }, 1000);
+        const mm = String(Math.floor(diff/60000)).padStart(2,'0');
+        const ss = String(Math.floor((diff%60000)/1000)).padStart(2,'0');
+        display.textContent = `Remaining: ${mm}:${ss}`;
+      },500);
 
-      // auto-submit on time up
-      const timeoutId = setTimeout(() => {
-        doSubmit(state);
-        showMessage("Time is up!");
-        clearInterval(timerInterval);
-        setTimeout(()=>location.reload(), 5000);
-      }, endD - new Date());
+      // Auto-submit
+      const toID = setTimeout(()=>{
+        submitExam(s);
+        clearInterval(iv);
+        showMessage("Time's up!");
+        setTimeout(()=>location.reload(),5000);
+      }, endTime - new Date());
 
-      // render question
-      function renderQuestion() {
-        const i = state.currentIndex;
-        const q = qs[i];
+      // Render question
+      function render() {
+        const i = s.idx, q = qs[i];
+        const optsHtml = q.options.map((opt,idx)=> {
+          const num = idx+1;
+          const sel = s.answers[i]===num ? " selected" : "";
+          return `
+            <div class="opt${sel}" data-num="${num}">
+              ${opt.desc}
+              ${opt.imageUrl?`<img src="${opt.imageUrl}">`:``}
+            </div>`;
+        }).join("");
+
         document.querySelector(".exampanel").innerHTML = `
-          <div id="timer">Remaining: --:--</div>
-          <h4>Question ${i+1} of ${numQ}</h4>
+          <h4>Question ${i+1} of ${total}</h4>
           <p>${q.question}</p>
-          ${[1,2,3,4].map(n => {
-            const sel = state.answers[i]===n;
-            const cls = ['opt', sel?'selected':''].filter(Boolean).join(" ");
-            return `<button class="${cls}" data-choice="${n}">${q['option'+n]}</button>`;
-          }).join("<br>")}
-          <br>
+          <div id="opts">${optsHtml}</div><br>
           <button id="prev" ${i===0?'disabled':''}>Previous</button>
-          <button id="next">${i+1===numQ?'Submit':'Next'}</button>
+          <button id="next">${i+1===total?'Submit':'Next'}</button>
         `;
 
-        // attach handlers
-        document.querySelectorAll(".opt").forEach(btn=>{
-          btn.onclick = () => {
-            state.answers[i] = +btn.dataset.choice;
-            persistState(state);
-            renderQuestion();
+        // Option click
+        document.querySelectorAll("#opts .opt").forEach(el=>{
+          el.onclick = ()=>{
+            s.answers[i] = +el.dataset.num;
+            persist(s);
+            render();
           };
         });
-        document.getElementById("prev").onclick = () => {
-          state.currentIndex = i-1;
-          persistState(state);
-          renderQuestion();
+
+        // Prev/Next
+        document.getElementById("prev").onclick = ()=>{
+          s.idx--; persist(s); render();
         };
-        document.getElementById("next").onclick = () => {
-          if (i+1===numQ) return doSubmit(state);
-          state.currentIndex = i+1;
-          persistState(state);
-          renderQuestion();
+        document.getElementById("next").onclick = ()=>{
+          if (i+1===total) submitExam(s);
+          else { s.idx++; persist(s); render(); }
         };
       }
 
-      renderQuestion();
+      render();
 
-      // final submit
-      async function doSubmit(st) {
-        clearTimeout(timeoutId);
-        clearInterval(timerInterval);
+      // Submit
+      async function submitExam(state) {
+        clearTimeout(toID);
+        clearInterval(iv);
         clearState();
         const payload = {
-          examid: st.examid,
+          examid: state.examid,
           email: "{{ email }}",
-          timeTakenSeconds: Math.floor((Date.now()-startTs)/1000),
-          responses: st.questions.map((q,idx)=>({
+          timeTakenSeconds: Math.floor((Date.now() - startTs)/1000),
+          responses: state.questions.map((q,j)=>({
             questionnumber: q.questionnumber,
-            selectedOption: st.answers[idx]||0,
-            timestamp:      new Date().toISOString()
+            selectedOption: state.answers[j]||0
           }))
         };
         await fetch("/submit-exam/", {
@@ -253,12 +218,10 @@
       }
     }
 
-    // on load: if mid-exam, resume
-    window.addEventListener("DOMContentLoaded", ()=>{
-      const st = restoreState();
-      if (st && st.questions) {
-        startExam(st);
-      }
+    // Resume if mid-exam
+    window.addEventListener("DOMContentLoaded",()=>{
+      const st = restore();
+      if (st && st.questions) runExam(st);
     });
   </script>
 </body>

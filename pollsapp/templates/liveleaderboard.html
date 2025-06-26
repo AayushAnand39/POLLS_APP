@@ -5,13 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Live Leaderboard</title>
   <style>
-    table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+    .navbar a, .officialsection a { margin-right: 1em; }
+    #lastUpdated { font-size: 0.9em; color: #555; margin: 0.5em 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 0.5em; }
     th, td { border: 1px solid #ccc; padding: 0.5em; text-align: center; }
     th { background: #f5f5f5; }
-    #timer { font-size: 1.1em; margin-bottom: 0.5em; color: #b71c1c; }
     .pagination { margin-top: 0.5em; }
     .pagination button { margin-right: 0.5em; }
     #setupError { color: #b71c1c; }
+    .user-cell { display: flex; align-items: center; }
+    .user-cell img { width: 32px; height: 32px; border-radius: 50%; margin-right: 0.5em; }
   </style>
 </head>
 <body>
@@ -20,14 +23,18 @@
     <a href="{% url 'post'      email=email %}">POST</a>
     <a href="{% url 'chat'      email=email %}">CHAT</a>
     <a href="{% url 'official'  email=email %}">OFFICIAL</a>
-    <a href="/profile">PROFILE</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
     <a href="{% url 'logout'    email=email %}">LOGOUT</a>
+  </div>
+
+  <div id="lastUpdated" style="display:none">
+    Last updated: <span id="updatedTime"></span>
   </div>
 
   <div class="officialsection">
     <a href="{% url 'createexam' email=email %}">CREATE EXAMINATION</a>
     <a href="{% url 'attendexam' email=email %}">ATTEND EXAMINATION</a>
-    <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD FOR EXAM</a>
+    <a href="{% url 'liveleaderboard' email=email%}">VIEW LIVE LEADERBOARD</a>
   </div>
 
   <h2>Live Leaderboard</h2>
@@ -47,7 +54,6 @@
   </div>
 
   <div id="leaderboard" style="display:none">
-    <div id="timer">Remaining: --:--</div>
     <table>
       <thead>
         <tr id="headerRow"></tr>
@@ -62,118 +68,87 @@
   </div>
 
   <script>
-    // CSRF helper to read Django's CSRF cookie
-    function getCookie(name) {
-      let v = null;
-      document.cookie.split(";").forEach(c => {
-        c = c.trim();
-        if (c.startsWith(name + "=")) {
-          v = decodeURIComponent(c.slice(name.length+1));
-        }
-      });
-      return v;
-    }
-    const csrftoken = getCookie("csrftoken");
-    const emailEl   = "{{ email }}";
+    const csrftoken = (document.cookie.match(/csrftoken=([\w-]+)/)||[])[1];
+    let examid, page = 1, qnums = [], refreshInterval;
 
-    let examid, page = 1, qnums = [];
-
-    // When the form is submitted, fetch the leaderboard data
     document.getElementById("leaderboardForm").onsubmit = async e => {
       e.preventDefault();
-
-      const input = document.getElementById("examid").value.trim();
-      if (!input || isNaN(input) || +input < 1) {
-        document.getElementById("setupError").textContent =
-          "Please enter a valid Exam ID.";
+      document.getElementById("setupError").textContent = "";
+      const v = +document.getElementById("examid").value;
+      if (!v || v < 1) {
+        document.getElementById("setupError").textContent = "Please enter a valid Exam ID.";
         return;
       }
-
-      examid = +input;
-      page   = 1;
-      document.getElementById("setupError").textContent = "";
-
+      examid = v; page = 1;
+      clearInterval(refreshInterval);
       const ok = await loadAndRender();
       if (ok) {
-        document.getElementById("setup").style.display      = "none";
+        document.getElementById("setup").style.display = "none";
         document.getElementById("leaderboard").style.display = "";
-        setInterval(loadAndRender, 5000);
+        document.getElementById("lastUpdated").style.display = "";
+        refreshInterval = setInterval(loadAndRender, 5000);
       }
     };
 
     document.getElementById("prevBtn").onclick = () => {
-      if (page > 1) {
-        page--;
-        loadAndRender();
-      }
+      if (page > 1) { page--; loadAndRender(); }
     };
     document.getElementById("nextBtn").onclick = () => {
-      page++;
-      loadAndRender();
+      page++; loadAndRender();
     };
 
     async function loadAndRender() {
       const url = `{% url 'liveleaderboard-data' email=email %}`
                 + `?examid=${examid}&page=${page}`;
-
       const resp = await fetch(url, {
         headers: { "X-CSRFToken": csrftoken }
       });
 
-      // handle known HTTP errors before parsing JSON
-      if (resp.status === 400) {
-        document.getElementById("setupError").textContent =
-          "Invalid Exam ID.";
-        return false;
-      }
-      if (resp.status === 404) {
-        document.getElementById("setupError").textContent =
-          "Exam not found.";
-        return false;
-      }
-      if (resp.status === 403) {
-        document.getElementById("setupError").textContent =
-          "You do not have permission.";
-        return false;
-      }
-      if (!resp.ok) {
-        console.error(await resp.text());
-        document.getElementById("setupError").textContent =
-          "Unexpected error loading leaderboard.";
-        return false;
-      }
+      if (resp.status === 400) { showError("Invalid Exam ID."); return false; }
+      if (resp.status === 404) { showError("Exam not found."); return false; }
+      if (resp.status === 403) { showError("Forbidden."); return false; }
+      if (!resp.ok) { showError("Unexpected error."); return false; }
 
-      // now safe to parse JSON
       const js = await resp.json();
       qnums = js.qnums;
       renderHeader();
       renderBody(js.rows);
       renderPagination(js.page, js.num_pages);
+      document.getElementById("updatedTime").textContent = new Date().toLocaleTimeString();
       return true;
+    }
+
+    function showError(msg) {
+      document.getElementById("setupError").textContent = msg;
     }
 
     function renderHeader() {
       const hdr = document.getElementById("headerRow");
-      hdr.innerHTML = `<th>Examinee</th>`
-        + qnums.map(n => `<th>Q${n}</th>`).join("")
-        + `<th>Time(s)</th><th>Total</th>`;
+      hdr.innerHTML = `<th>Examinee</th>` +
+        qnums.map(n => `<th>Q${n}</th>`).join("") +
+        `<th>Time(s)</th><th>Total</th>`;
     }
 
     function renderBody(rows) {
-      const b = document.getElementById("bodyRows");
-      b.innerHTML = rows.map(r =>
-        `<tr>
-           <td>${r.name}</td>
-           ${r.per_q.map(p => `<td>${p}</td>`).join("")}
-           <td>${r.timeTaken}</td>
-           <td>${r.totalScore}</td>
-         </tr>`
-      ).join("");
+      const body = document.getElementById("bodyRows");
+      body.innerHTML = rows.map(r => `
+        <tr>
+          <td class="user-cell">
+            ${r.pictureUrl
+              ? `<img src="${r.pictureUrl}" alt="User pic">`
+              : `<span style="width:32px;height:32px;display:inline-block;background:#ccc;border-radius:50%;margin-right:0.5em;"></span>`
+            }
+            ${r.name}
+          </td>
+          ${r.per_q.map(p => `<td>${p}</td>`).join("")}
+          <td>${r.timeTaken}</td>
+          <td>${r.totalScore}</td>
+        </tr>
+      `).join("");
     }
 
     function renderPagination(cur, total) {
-      document.getElementById("pageInfo").textContent =
-        `Page ${cur} of ${total}`;
+      document.getElementById("pageInfo").textContent = `Page ${cur} of ${total}`;
       document.getElementById("prevBtn").disabled = cur <= 1;
       document.getElementById("nextBtn").disabled = cur >= total;
     }

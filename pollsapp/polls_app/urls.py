@@ -27,4 +27,5 @@ urlpatterns = [
     path('poll/like/',  views.poll_like,    name='poll_like'),
     path('poll/dislike/', views.poll_dislike, name='poll_dislike'),
     path('poll/status/', views.poll_status, name='poll_status'),
+    path('profile/<str:email>/', views.profile, name='profile'),
 ]

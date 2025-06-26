@@ -1,32 +1,3 @@
-{% comment %} <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Post Poll</title>
-</head>
-<body>
-    <div class="navbar">
-        <a href="{% url 'dashboard' email=email %}">DASHBOARD</a>
-        <a href="{% url 'post' email=email %}">POST</a>
-        <a href="{% url 'chat' email=email %}">CHAT</a>
-        <a href="{% url 'official' email=email %}">OFFICIAL</a>
-        <a href="/profile">PROFILE</a>
-        <a href="{% url 'logout' email=email %}">LOGOUT</a>
-    </div>
-    <form action="{% url 'post' email=email %}" method="post">
-        {% csrf_token %}
-        <input type="text" name="question" id="question" placeholder="Enter your question"><br>
-        <input type="text" name="option1" id="option1" placeholder="Enter option 1"><br>
-        <input type="text" name="option2" id="option2" placeholder="Enter option 2"><br>
-        <input type="text" name="option3" id="option3" placeholder="Enter option 3"><br>
-        <input type="text" name="option4" id="option4" placeholder="Enter option 4"><br>
-        <input type="submit" value="Post">
-    </form>
-</body>
-</html> {% endcomment %}
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -46,7 +17,7 @@
     <a href="{% url 'post' email=email %}">POST</a>
     <a href="{% url 'chat' email=email %}">CHAT</a>
     <a href="{% url 'official' email=email %}">OFFICIAL</a>
-    <a href="/profile">PROFILE</a>
+    <a href="{% url 'profile'  email=email %}">PROFILE</a>
     <a href="{% url 'logout' email=email %}">LOGOUT</a>
   </div>
 
